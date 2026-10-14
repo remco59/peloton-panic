@@ -1,77 +1,101 @@
 # Peloton Panic
 
-A couch board game. The TV is the table, phones are the hand. Manage a three-rider cycling
-team, sneak cards past your friends, trade favours in the bunch, and try not to finish
-under the red lantern.
+Een bankhangspel voor 2 tot 6 spelers. De tv is het speelbord, jullie telefoons zijn je hand.
+Je managet een ploeg van drie renners door een seizoen van drie etappes: kaarten kiezen,
+renners trainen, spullen en staf inkopen, en dan een simpele race waarin jouw voorbereiding
+het verschil maakt. Wie laatste eindigt, krijgt de rode lantaarn.
 
-![TV during a race](docs/screenshots/tv-3-race.png)
+![De race op de tv](docs/screenshots/tv-4-race.png)
 
-## Run it
+## Starten
 
 ```bash
 npm install
-npm run setup:tts   # optional: installs rany2/edge-tts into ./.venv for commentator voices
+npm run setup:tts   # optioneel: installeert rany2/edge-tts in ./.venv voor de commentatorstemmen
 npm run dev
 ```
 
-- TV: open <http://localhost:3000> on the computer or TV browser.
-- Phones: scan the QR code on the TV, or open the address shown under the room code.
-  Phones must be on the same Wi-Fi as the computer running the server.
-- The first player to join is the **president** and gets the Start button. Use `+ BOT` to
-  fill the peloton, or to try the game alone.
+- Tv: open <http://localhost:3000> in de browser van de computer of tv.
+- Telefoons: scan de QR-code op de tv, of ga naar het adres onder de kamercode. Telefoons moeten
+  op hetzelfde wifi zitten als de computer waarop de server draait.
+- De eerste speler die meedoet is de **president**: die start het seizoen, voegt bots toe en kan de
+  **tutorial-modus** aanzetten.
 
-## How a round works
+## Hoe een etappe werkt
 
-1. **Event**: the TV reveals conditions (wind, rain, a chicken on the road...).
-2. **Choose effort**: everyone secretly plays one card per rider from their shared hand.
-   Riders without a card coast and recover a tired card.
-3. **Resolve**: all moves happen at once. Followers draft (+1), the front of each group
-   pays a tired card into the wind. Dropped riders get pulled back by the peloton.
-4. **Trade**: open table talk. Offer cards, ask for cards, make pacts.
-5. Repeat until someone crosses the line. Top six riders score; secret sponsor contracts
-   add bonus points; last place wins the **Lanterne Rouge**.
+1. **Draft**: op de tv ligt een markt van 5 kaarten. Om de beurt pak je er een, of een onbekende
+   van de stapel. Het team onderaan het klassement begint.
+2. **Voorbereiding** (telefoon): train je renners, leg spullen op je bord, koop extra kaarten met
+   munten, ruil met anderen of saboteer iemand (licht).
+3. **Race**: elke ronde kies je per renner **Rustig**, **Normaal** of **Alles geven**. Energie,
+   training, staf en materiaal bepalen hoe ver je komt. Drafting, wind en pech doen de rest.
+4. **Uitslag**: punten voor de top zes, munten voor de uitslag en je sponsors, bonuskaarten voor
+   het podium en een troostkaart voor de rode lantaarn.
 
-## Commentators
+### Training en overtraining
 
-Two pixel-art commentators narrate from the game log. Voices come from Microsoft Edge's
-online voices through [edge-tts](https://github.com/rany2/edge-tts), synthesised on the
-server and cached in `.cache/tts`. Without it the game falls back to browser speech and
-then to captions only. Browsers need one click or key press on the TV to allow sound.
+Training maakt een renner sterker, maar **vervaagt** na elke etappe met 1 per eigenschap. Elke
+training kost vermoeidheid. Is die te hoog, dan ben je **overtraind** en word je juist zwakker.
+Een rustdag of fysiotherapeut helpt.
 
-Edge TTS is an unofficial client of a Microsoft service: fine for a home game, but not
-something to depend on for a public product. Voices live in `src/shared/content.ts`.
+### Spullen
 
-## Project layout
+| Soort | Voorbeelden |
+| --- | --- |
+| Training | Duurloop, Krachttraining, Klimstage, Hoogtestage, Trainingskamp, Rustdag |
+| Sponsor | Bakkerij, Regiobank, Energiedrank (munten per etappe) |
+| Staf | Mecanicien, Soigneur, Ploegleider, Voedingsdeskundige, Fysio |
+| Materiaal | Reservefiets, Aero-wielen, Lichte klimfiets |
+| Wagen | Volgauto, Teambus |
+| Sabotage | Spijkers op de weg, Verwisselde bidons (altijd een lichte hinder, nooit uitschakeling) |
+
+## Tutorial-modus
+
+De president zet de tutorial aan in de lobby. Er is geen apart spel: iedereen speelt gewoon
+mee, en de commentatoren leggen onderweg uit wat er gebeurt (draft, voorbereiding, tempo kiezen,
+drafting, uitslag), elk onderwerp één keer. Er is meer tijd per fase.
+
+## Commentatoren
+
+Twee commentatoren (Johan en Marieke) vertellen vanuit het spelverloop, in het Nederlands. De stemmen
+komen van Microsoft Edge via [edge-tts](https://github.com/rany2/edge-tts), op de server
+gegenereerd en gecachet in `.cache/tts`. Zonder edge-tts valt het terug op spraak van de browser en
+daarna op ondertitels. Klik één keer op de tv om geluid toe te staan.
+
+Edge TTS is een onofficiële client van een Microsoft-dienst: prima voor een spelletje thuis, maar
+niets om een product op te bouwen. Stemmen staan in `src/shared/content.ts`.
+
+## Projectindeling
 
 ```
-src/shared/   rules engine (pure reducer), content, commentary, protocol
-src/server/   rooms, WebSocket server, bots, TTS
-src/client/   tv/ (canvas track + HUD) and play/ (phone controller)
+src/shared/   regelmotor (pure reducer), inhoud, commentaar, protocol
+src/server/   kamers, WebSocket-server, bots, TTS
+src/client/   tv/ (canvas-parcours + panelen) en play/ (telefoon)
 scripts/      setup-tts.sh, screenshots.mts
 ```
 
-The rules are `(state, action) -> state` in `src/shared/engine.ts`, so the whole game is
-deterministic from a seed and covered by `npm test`.
+De regels zijn `(state, action) -> state` in `src/shared/engine.ts`, dus een heel seizoen is
+deterministisch vanaf een seed en gedekt door `npm test`.
 
-## Commands
+## Commando's
 
-| Command | What it does |
+| Commando | Wat het doet |
 | --- | --- |
-| `npm run dev` | Server plus Vite dev middleware on :3000 |
-| `npm test` | Rules engine tests |
-| `npm run typecheck` | TypeScript check |
-| `npm run build` / `npm start` | Production build and server |
-| `npm run screenshots` | Plays a bot game against the dev server and saves `docs/screenshots` (needs Google Chrome) |
+| `npm run dev` | Server plus Vite op :3000 |
+| `npm test` | Tests van de regelmotor |
+| `npm run typecheck` | TypeScript-controle |
+| `npm run build` / `npm start` | Productiebuild en server |
+| `npm run screenshots` | Speelt een seizoen met bots en slaat screenshots op in `docs/screenshots` (vereist Google Chrome) |
 
 ## Screenshots
 
 | | |
 |---|---|
-| ![Lobby](docs/screenshots/tv-1-lobby.png) | ![Choosing effort](docs/screenshots/tv-2-play.png) |
-| ![Mid race](docs/screenshots/tv-5-midrace.png) | ![Finish](docs/screenshots/tv-6-finish.png) |
+| ![Lobby](docs/screenshots/tv-1-lobby.png) | ![Draft](docs/screenshots/tv-2-draft.png) |
+| ![Voorbereiding](docs/screenshots/tv-3-team.png) | ![Uitslag](docs/screenshots/tv-6-results.png) |
 
 <p>
-<img src="docs/screenshots/phone-2-play.png" width="220" />
-<img src="docs/screenshots/phone-4-trade.png" width="220" />
-<img src="docs/screenshots/phone-5-finish.png" width="220" />
+<img src="docs/screenshots/phone-2-draft.png" width="220" />
+<img src="docs/screenshots/phone-3-kaarten.png" width="220" />
+<img src="docs/screenshots/phone-5-race.png" width="220" />
 </p>

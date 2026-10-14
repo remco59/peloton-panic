@@ -1,17 +1,20 @@
 :root {
-  --bg: #0f1224;
-  --panel: #1a1f3a;
-  --panel-2: #262d52;
-  --line: #3a4375;
-  --ink: #f6f1e4;
-  --muted: #98a2cc;
-  --accent: #ffd23f;
-  --good: #5eea8d;
-  --bad: #ff6b6b;
+  /* Flat palette: solid fills, hairline borders, no shadows. */
+  --bg: #0d0f17;
+  --panel: #161926;
+  --panel-2: #1f2333;
+  --line: #2a2f45;
+  --ink: #f3f4f8;
+  --muted: #8b91ab;
+  --accent: #ffc83d;
+  --on-accent: #17140a;
+  --good: #3ddc84;
+  --bad: #ff5c5c;
   --sky: #7ec8f2;
-  --px: 4px;
-  --pixel: 'Press Start 2P', ui-monospace, 'SF Mono', Menlo, monospace;
-  --body: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --r-lg: 16px;
+  --r-md: 12px;
+  --r-sm: 8px;
+  --body: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   color-scheme: dark;
 }
 
@@ -30,6 +33,8 @@ body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--body);
+  font-feature-settings: 'tnum' 1;
+  -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -38,23 +43,37 @@ button {
   color: inherit;
 }
 
+/* Bold UI text: headings, numbers and small caps labels. `.pixel` is a legacy alias. */
+.ty,
 .pixel {
-  font-family: var(--pixel);
+  font-weight: 700;
   letter-spacing: 0;
-  line-height: 1.5;
+  line-height: 1.25;
 }
 
-/* A chunky, pixel-style frame: stepped corners made from box-shadows. */
 .frame {
   background: var(--panel);
-  border: var(--px) solid var(--line);
-  box-shadow: 0 var(--px) 0 0 #070914;
+  border-radius: var(--r-lg);
 }
 
 .chip {
   display: inline-block;
-  width: 0.9em;
-  height: 0.9em;
-  border: 2px solid rgba(0, 0, 0, 0.5);
-  vertical-align: -0.1em;
+  width: 0.8em;
+  height: 0.8em;
+  border-radius: 50%;
+  vertical-align: -0.05em;
+}
+.boot {
+  height: 100%;
+  display: grid;
+  place-content: center;
+  gap: 12px;
+  text-align: center;
+  font-size: 28px;
+}
+.dim {
+  color: var(--muted);
+}
+.bad {
+  color: var(--bad);
 }

@@ -1,18 +1,29 @@
-// Shared types for Peloton Panic. Used by server, TV and phone clients.
+// Gedeelde types voor Peloton Panic: server, TV en telefoon gebruiken dezelfde.
 
 export const MIN_TEAMS = 2;
 export const MAX_TEAMS = 6;
 export const RIDERS_PER_TEAM = 3;
-export const HAND_SIZE = 6;
 export const TRACK_LENGTH = 32;
-export const CHASE_GAP = 4; // tiles behind the median rider before the peloton "pulls you back"
+export const STAGES = 3;
+export const START_COINS = 5;
+export const MARKET_SIZE = 5;
+export const BLIND_COST = 2;
+export const TRAININGS_PER_RIDER = 2;
+export const FORM_CAP = 4;
+export const FATIGUE_CAP = 6;
+export const OVERTRAIN_FREE = 2; // vermoeidheid tot en met dit niveau geeft geen straf
+export const CHASE_GAP = 4; // tegels achter de mediaan voor de peloton je terugtrekt
 export const POINTS_BY_RANK = [10, 7, 5, 3, 2, 1];
-export const CONTRACT_BONUS = 5;
+export const SLOT_LIMITS = { sponsor: 2, staff: 2, material: 2, car: 1 } as const;
 
 export type Terrain = 'flat' | 'climb' | 'descent' | 'cobbles';
 export type RiderType = 'sprinter' | 'climber' | 'rouleur';
-export type CardKind = 'energy' | 'gel' | 'attack' | 'tired';
-export type Phase = 'lobby' | 'play' | 'resolve' | 'trade' | 'finished';
+export type Stat = 'kracht' | 'klim' | 'sprint' | 'uithouding';
+export type Stats = Record<Stat, number>;
+export type Effort = 'rustig' | 'normaal' | 'alles';
+export type Phase = 'lobby' | 'draft' | 'team' | 'race' | 'resolve' | 'results' | 'finished';
+export type CardKind = 'training' | 'sponsor' | 'staff' | 'material' | 'car' | 'sabotage';
+export type SlotKind = keyof typeof SLOT_LIMITS;
 
 export type QuirkId =
   | 'croissant'
@@ -22,13 +33,6 @@ export type QuirkId =
   | 'windHardened'
   | 'socks'
   | 'finisher';
-
-export type ContractId =
-  | 'loneWolf'
-  | 'domestiques'
-  | 'sprintKing'
-  | 'wheelMerchant'
-  | 'freshLegs';
 
 export type EventId =
   | 'calm'
@@ -44,13 +48,7 @@ export type EventId =
 
 export interface Card {
   id: string;
-  kind: CardKind;
-  value: number;
-}
-
-export interface CardSpec {
-  kind: CardKind;
-  value: number;
+  def: string; // sleutel in CARD_DEFS
 }
 
 export interface Rider {
@@ -60,23 +58,35 @@ export interface Rider {
   type: RiderType;
   quirk: QuirkId;
   pos: number;
+  base: Stats; // blijvende basiswaarden
+  form: Stats; // training: vervaagt 1 per etappe
+  fatigue: number; // vermoeidheid: te hoog = overtraind
+  trained: number; // trainingen deze etappe
+  energy: number; // alleen in de race
+  maxEnergy: number;
 }
 
 export interface TeamStats {
   roundsLed: number;
   trades: number;
-  tired: number;
+  trainings: number;
+  alles: number;
+  exhausted: number;
+  sabotages: number;
 }
 
 export interface Team {
   id: string;
-  name: string; // player's name
-  color: number; // index into TEAM_COLORS
+  name: string; // naam van de speler
+  color: number;
   riderIds: string[];
-  draw: Card[];
+  coins: number;
+  points: number; // seizoenspunten
   hand: Card[];
-  discard: Card[];
-  contract: ContractId;
+  slots: Record<SlotKind, Card[]>;
+  sabotage: string[]; // def-ids van sabotage die dit team deze etappe treft
+  raceShield: number; // reservefietsen die nog pech opvangen
+  raceService: number; // volgauto-servicemomenten die nog over zijn
   stats: TeamStats;
   isBot: boolean;
 }
@@ -91,19 +101,24 @@ export interface Offer {
   id: string;
   from: string;
   to: string;
-  give: string[]; // card ids from `from`'s hand
-  want: CardSpec[]; // what `from` asks for out of `to`'s hand
+  give: string[]; // kaart-ids uit de hand van `from`
+  giveCoins: number;
+  want: string[]; // def-ids die `from` vraagt uit de hand van `to`
+  wantCoins: number;
 }
 
 export interface OfferView extends Offer {
-  giveCards: Card[]; // resolved so the receiver can see what is on the table
+  giveCards: Card[];
 }
 
 export interface MoveParts {
-  base: number;
-  type: number;
+  effort: number;
+  stat: number;
+  terrain: number;
   quirk: number;
   event: number;
+  luck: number; // pech (negatief) of meewind (+1)
+  tired: number; // op de fles
   draft: number;
   chase: number;
 }
@@ -113,11 +128,16 @@ export interface RiderMove {
   from: number;
   to: number;
   terrain: Terrain;
-  cardKind: CardKind | null;
-  cardValue: number | null;
-  coasted: boolean;
+  effort: Effort;
   parts: MoveParts;
+  roll: number;
   windPaid: boolean;
+  exhausted: boolean;
+  pech: boolean;
+  shielded: boolean;
+  boost: boolean;
+  service: boolean;
+  energyAfter: number;
   clusterIndex: number;
 }
 
@@ -129,10 +149,26 @@ export interface ResolveReport {
   finished: boolean;
 }
 
-export interface ContractResult {
+export interface DraftState {
+  order: string[]; // teamIds, volledige volgorde (slang)
+  idx: number;
+}
+
+export interface StageTeamResult {
   teamId: string;
-  contract: ContractId;
-  met: boolean;
+  stagePoints: number;
+  prizeCoins: number;
+  sponsorCoins: number;
+  bonusCards: string[]; // def-ids
+  totalPoints: number;
+}
+
+export interface StageResult {
+  stage: number;
+  ranking: { riderId: string; rank: number; points: number }[];
+  teams: StageTeamResult[];
+  lanterneRougeTeamId: string;
+  sabotages: { fromTeamId: string; toTeamId: string; def: string }[];
 }
 
 export interface Award {
@@ -141,15 +177,8 @@ export interface Award {
   blurb: string;
 }
 
-export interface Results {
-  ranking: { riderId: string; rank: number; points: number }[];
-  teams: {
-    teamId: string;
-    stagePoints: number;
-    contract: ContractId;
-    contractMet: boolean;
-    total: number;
-  }[];
+export interface SeasonResult {
+  teams: { teamId: string; points: number; coins: number }[];
   winnerTeamId: string;
   lanterneRougeTeamId: string;
   awards: Award[];
@@ -157,6 +186,7 @@ export interface Results {
 
 export interface GameState {
   phase: Phase;
+  tutorial: boolean;
   round: number;
   stage: number;
   trackLength: number;
@@ -165,34 +195,43 @@ export interface GameState {
   riders: Rider[];
   event: ActiveEvent | null;
   eventDeck: EventId[];
-  plays: Record<string, Record<string, string | null>>; // teamId -> riderId -> cardId
+  deck: Card[];
+  discard: Card[];
+  market: Card[];
+  draft: DraftState | null;
+  ready: Record<string, boolean>;
+  efforts: Record<string, Effort>;
   locked: Record<string, boolean>;
-  tradeReady: Record<string, boolean>;
   offers: Offer[];
+  sabotageLog: { fromTeamId: string; toTeamId: string; def: string }[];
   report: ResolveReport | null;
-  results: Results | null;
+  stageResult: StageResult | null;
+  season: SeasonResult | null;
   rng: number;
   nextCardId: number;
   nextOfferId: number;
 }
 
-// ---- Views sent over the wire ---------------------------------------------
+// ---- Wat over de lijn gaat ---------------------------------------------------
 
 export interface PublicTeam {
   id: string;
   name: string;
   color: number;
   riderIds: string[];
+  coins: number;
+  points: number;
   handCount: number;
-  drawCount: number;
-  discardCount: number;
+  slots: Record<SlotKind, string[]>; // def-ids: spullen zijn openbaar
   locked: boolean;
   ready: boolean;
   isBot: boolean;
+  trainings: number;
 }
 
 export interface PublicState {
   phase: Phase;
+  tutorial: boolean;
   round: number;
   stage: number;
   trackLength: number;
@@ -200,34 +239,50 @@ export interface PublicState {
   teams: PublicTeam[];
   riders: Rider[];
   event: ActiveEvent | null;
+  market: string[]; // def-ids
+  marketCards: Card[];
+  deckCount: number;
+  draft: { order: string[]; idx: number; currentTeamId: string | null; total: number } | null;
   report: ResolveReport | null;
-  results: Results | null;
-  contractsRevealed: ContractResult[] | null;
+  stageResult: StageResult | null;
+  season: SeasonResult | null;
 }
 
 export interface PlayerView {
   teamId: string;
   hand: Card[];
-  contract: ContractId;
-  plays: Record<string, string | null>;
+  efforts: Record<string, Effort>;
   offersIn: OfferView[];
   offerOut: OfferView | null;
+  sabotageOn: string[]; // wat iemand tegen jou inzet: pas bij de uitslag zichtbaar wie
+  pickPending: boolean; // jij bent aan de beurt in de draft
   stats: TeamStats;
 }
 
-// ---- Actions ----------------------------------------------------------------
+// ---- Acties ----------------------------------------------------------------
+
+export type PickSource = { kind: 'market'; index: number } | { kind: 'deck' };
 
 export type Action =
   | { type: 'join'; name: string; isBot?: boolean }
   | { type: 'nameRiders'; teamId: string; names: string[] }
+  | { type: 'setTutorial'; on: boolean }
   | { type: 'start' }
-  | { type: 'play'; teamId: string; plays: Record<string, string | null> }
-  | { type: 'unlock'; teamId: string }
-  | { type: 'offer'; teamId: string; to: string; give: string[]; want: CardSpec[] }
+  | { type: 'draftPick'; teamId: string; source: PickSource }
+  | { type: 'draftSkip'; teamId: string }
+  | { type: 'buy'; teamId: string; source: PickSource }
+  | { type: 'train'; teamId: string; cardId: string; riderId: string }
+  | { type: 'install'; teamId: string; cardId: string; replaceDef?: string }
+  | { type: 'sabotage'; teamId: string; cardId: string; targetTeamId: string }
+  | { type: 'offer'; teamId: string; to: string; give: string[]; giveCoins: number; want: string[]; wantCoins: number }
   | { type: 'withdraw'; teamId: string }
   | { type: 'respond'; teamId: string; offerId: string; accept: boolean }
-  | { type: 'tradeReady'; teamId: string }
+  | { type: 'ready'; teamId: string }
+  | { type: 'unready'; teamId: string }
+  | { type: 'effort'; teamId: string; efforts: Record<string, Effort> }
+  | { type: 'unlock'; teamId: string }
   | { type: 'next' }
   | { type: 'timeout' }
+  | { type: 'nextStage' }
   | { type: 'rematch' }
   | { type: 'removeBot' };

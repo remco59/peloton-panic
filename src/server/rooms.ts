@@ -1,27 +1,50 @@
-// Room management: one Room per TV session. Holds the authoritative GameState, the
-// connected sockets, phase timers, bots, and the commentary feed.
+// Kamers: één Room per tv-sessie. Bewaart de gezaghebbende GameState, de verbonden
+// sockets, fasetimers, bots en de commentaarfeed.
 
 import { randomInt, randomUUID } from 'node:crypto';
 import type { WebSocket } from 'ws';
-import { eventLines, finishLines, introLines, roundLines, tradeLines } from '../shared/commentary';
-import type { Line } from '../shared/commentary';
-import { botPlays, createGame, matchSpecs, reduce, RuleError, toPlayerView, toPublic } from '../shared/engine';
-import type { ClientMsg, FeedBatch, PlayerAction, RoomInfo, ServerMsg } from '../shared/protocol';
+import {
+  eventLines,
+  finishLines,
+  introLines,
+  pickLines,
+  roundLines,
+  stageLines,
+  stageResultLines,
+  teamPhaseLines,
+  tutorialLines,
+} from '../shared/commentary';
+import type { Line, TutorialTopic } from '../shared/commentary';
+import {
+  botDraft,
+  botEfforts,
+  botStep,
+  createGame,
+  reduce,
+  RuleError,
+  toPlayerView,
+  toPublic,
+} from '../shared/engine';
+import type { ClientMsg, FeedBatch, PlayerAction, PresidentAction, RoomInfo, ServerMsg } from '../shared/protocol';
 import type { Action, GameState } from '../shared/types';
 import { warm } from './tts';
 
 export const TIMING = {
-  playMs: 30_000,
+  draftMs: 20_000,
+  teamMs: 90_000,
+  raceMs: 25_000,
   resolveMs: 7_000,
-  tradeMs: 25_000,
+  resultsMs: 35_000,
+  tutorialFactor: 1.6, // meer tijd als de commentatoren uitleg geven
 };
 
-const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I or O
-const FEED_KEEP = 8;
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // geen I of O
+const FEED_KEEP = 10;
+const BOT_NAMES = ['Bot Bram', 'Bot Sanne', 'Bot Joris', 'Bot Fleur', 'Bot Daan', 'Bot Lotte'];
 
 interface Seat {
   token: string;
-  sockets: Set<WebSocket>; // a seat may be open on more than one device (phone plus a spare tab)
+  sockets: Set<WebSocket>; // een stoel kan op meer dan één apparaat open staan
 }
 
 export class Room {
@@ -35,13 +58,14 @@ export class Room {
   private feedSeq = 0;
   private timer: NodeJS.Timeout | null = null;
   private botTimers: NodeJS.Timeout[] = [];
+  private explained = new Set<TutorialTopic>();
 
   constructor(
     readonly code: string,
     public joinBase: string,
   ) {}
 
-  // ---- Messaging ----
+  // ---- Berichten ----
 
   private info(): RoomInfo {
     const connected: Record<string, boolean> = {};
@@ -61,13 +85,7 @@ export class Room {
     const info = this.info();
     for (const ws of this.tvs) send(ws, { t: 'tv:state', state, feed: this.feed, ...info });
     for (const [teamId, seat] of this.seats) {
-      const msg: ServerMsg = {
-        t: 'player:state',
-        state,
-        me: toPlayerView(this.state, teamId),
-        teamId,
-        ...info,
-      };
+      const msg: ServerMsg = { t: 'player:state', state, me: toPlayerView(this.state, teamId), teamId, ...info };
       for (const ws of seat.sockets) send(ws, msg);
     }
   }
@@ -79,7 +97,18 @@ export class Room {
     for (const l of lines) warm(l.speaker, l.text);
   }
 
-  // ---- Connections ----
+  /** Uitleg, alleen bij tutorial en slechts één keer per onderwerp. */
+  private explain(topic: TutorialTopic): Line[] {
+    if (!this.state.tutorial || this.explained.has(topic)) return [];
+    this.explained.add(topic);
+    return tutorialLines(topic, toPublic(this.state));
+  }
+
+  private scaled(ms: number): number {
+    return this.state.tutorial ? Math.round(ms * TIMING.tutorialFactor) : ms;
+  }
+
+  // ---- Verbindingen ----
 
   attachTv(ws: WebSocket): void {
     this.tvs.add(ws);
@@ -103,7 +132,7 @@ export class Room {
         }
       }
     }
-    if (this.state.phase !== 'lobby') throw new RuleError('This race has already started. Ask for the next one!');
+    if (this.state.phase !== 'lobby') throw new RuleError('Deze race is al begonnen. Vraag om de volgende!');
     this.state = reduce(this.state, { type: 'join', name });
     const team = this.state.teams[this.state.teams.length - 1];
     const seat: Seat = { token: randomUUID(), sockets: new Set([ws]) };
@@ -113,39 +142,15 @@ export class Room {
     return { teamId: team.id, token: seat.token };
   }
 
-  // ---- Actions ----
+  // ---- Acties ----
 
   playerAct(teamId: string, a: PlayerAction): void {
     this.lastActive = Date.now();
-    let action: Action;
-    switch (a.type) {
-      case 'nameRiders':
-        action = { type: 'nameRiders', teamId, names: a.names };
-        break;
-      case 'play':
-        action = { type: 'play', teamId, plays: a.plays };
-        break;
-      case 'unlock':
-        action = { type: 'unlock', teamId };
-        break;
-      case 'offer':
-        action = { type: 'offer', teamId, to: a.to, give: a.give, want: a.want };
-        break;
-      case 'withdraw':
-        action = { type: 'withdraw', teamId };
-        break;
-      case 'respond':
-        action = { type: 'respond', teamId, offerId: a.offerId, accept: a.accept };
-        break;
-      case 'tradeReady':
-        action = { type: 'tradeReady', teamId };
-        break;
-    }
-    this.dispatch(action);
+    this.dispatch({ ...a, teamId } as Action);
   }
 
-  president(teamId: string, what: Extract<ClientMsg, { t: 'president' }>['what']): void {
-    if (teamId !== this.presidentTeamId) throw new RuleError('Only the president can do that');
+  president(teamId: string, what: PresidentAction): void {
+    if (teamId !== this.presidentTeamId) throw new RuleError('Alleen de president kan dat');
     this.lastActive = Date.now();
     switch (what) {
       case 'start':
@@ -154,25 +159,46 @@ export class Room {
         return this.dispatch({ type: 'rematch' });
       case 'removeBot':
         return this.dispatch({ type: 'removeBot' });
-      case 'addBot': {
-        const names = ['Bot Bram', 'Bot Sanne', 'Bot Joris', 'Bot Fleur', 'Bot Daan', 'Bot Lotte'];
+      case 'nextStage':
+        return this.dispatch({ type: 'nextStage' });
+      case 'tutorialOn':
+        return this.dispatch({ type: 'setTutorial', on: true });
+      case 'tutorialOff':
+        return this.dispatch({ type: 'setTutorial', on: false });
+      case 'addBot':
         return this.dispatch({
           type: 'join',
-          name: names[this.state.teams.length % names.length],
+          name: BOT_NAMES[this.state.teams.length % BOT_NAMES.length],
           isBot: true,
         });
-      }
     }
   }
 
-  /** The single place state changes. Handles timers, bots and commentary on transitions. */
+  /** De enige plek waar de toestand verandert: timers, bots en commentaar bij overgangen. */
   dispatch(action: Action): void {
     const prev = this.state;
-    this.state = reduce(prev, action); // throws RuleError on illegal moves
-    const changed = prev.phase !== this.state.phase || prev.round !== this.state.round;
+    this.state = reduce(prev, action); // gooit RuleError bij een illegale zet
+    const s = this.state;
+
+    if (action.type === 'draftPick') this.commentPick(prev, action.teamId, action.source);
+    if (action.type === 'setTutorial' || action.type === 'rematch') this.explained.clear();
+
+    const draftTurn = (x: GameState) => (x.phase === 'draft' && x.draft ? x.draft.idx : -1);
+    const changed =
+      prev.phase !== s.phase ||
+      prev.round !== s.round ||
+      prev.stage !== s.stage ||
+      draftTurn(prev) !== draftTurn(s);
     if (changed) this.onEnter(prev);
-    else if (this.state.phase === 'trade') this.scheduleBotTrades();
     this.broadcast();
+  }
+
+  private commentPick(prev: GameState, teamId: string, source: Extract<Action, { type: 'draftPick' }>['source']): void {
+    const team = this.state.teams.find((t) => t.id === teamId);
+    if (!team) return;
+    const def =
+      source.kind === 'market' ? prev.market[source.index]?.def : team.hand[team.hand.length - 1]?.def;
+    if (def) this.say(pickLines(team.name, def));
   }
 
   private clearTimers(): void {
@@ -182,14 +208,21 @@ export class Room {
     this.botTimers = [];
   }
 
-  private after(ms: number, fn: () => void): NodeJS.Timeout {
-    return setTimeout(() => {
+  private after(ms: number, fn: () => void, bot = false): NodeJS.Timeout {
+    const t = setTimeout(() => {
       try {
         fn();
       } catch (e) {
         if (!(e instanceof RuleError)) console.error('[room]', e);
       }
     }, ms);
+    if (bot) this.botTimers.push(t);
+    return t;
+  }
+
+  private setPhaseTimer(ms: number, action: Action): void {
+    this.phaseEndsAt = Date.now() + ms;
+    this.timer = this.after(ms, () => this.dispatch(action));
   }
 
   private onEnter(prev: GameState): void {
@@ -197,27 +230,45 @@ export class Room {
     const s = this.state;
     const pub = toPublic(s);
     switch (s.phase) {
-      case 'play': {
-        const lines: Line[] = [];
-        if (prev.phase === 'lobby') lines.push(...introLines(pub));
-        lines.push(...eventLines(pub));
-        this.say(lines);
-        this.phaseEndsAt = Date.now() + TIMING.playMs;
-        this.timer = this.after(TIMING.playMs, () => this.dispatch({ type: 'timeout' }));
-        this.scheduleBotPlays();
+      case 'draft': {
+        const first = s.draft?.idx === 0;
+        if (first) {
+          const lines: Line[] = [];
+          if (prev.phase === 'lobby') {
+            lines.push(...introLines(pub));
+            lines.push(...this.explain('intro'));
+            lines.push(...this.explain('season'));
+          } else lines.push(...this.explain('fade'));
+          lines.push(...stageLines(pub));
+          lines.push(...this.explain('draft'));
+          this.say(lines);
+        }
+        this.setPhaseTimer(this.scaled(TIMING.draftMs), { type: 'timeout' });
+        this.scheduleBotDraft();
+        break;
+      }
+      case 'team': {
+        this.say([...teamPhaseLines(pub), ...this.explain('team')]);
+        this.setPhaseTimer(this.scaled(TIMING.teamMs), { type: 'timeout' });
+        this.scheduleBotTeams();
+        break;
+      }
+      case 'race': {
+        this.say([...eventLines(pub), ...this.explain('race')]);
+        this.setPhaseTimer(this.scaled(TIMING.raceMs), { type: 'timeout' });
+        this.scheduleBotEfforts();
         break;
       }
       case 'resolve': {
-        this.say(roundLines(pub));
-        this.phaseEndsAt = Date.now() + TIMING.resolveMs;
-        this.timer = this.after(TIMING.resolveMs, () => this.dispatch({ type: 'next' }));
+        const extra = [...this.explain('resolve')];
+        if (s.report?.moves.some((m) => m.exhausted)) extra.push(...this.explain('exhausted'));
+        this.say([...roundLines(pub), ...extra]);
+        this.setPhaseTimer(this.scaled(TIMING.resolveMs), { type: 'next' });
         break;
       }
-      case 'trade': {
-        this.say(tradeLines(pub));
-        this.phaseEndsAt = Date.now() + TIMING.tradeMs;
-        this.timer = this.after(TIMING.tradeMs, () => this.dispatch({ type: 'timeout' }));
-        this.scheduleBotTrades();
+      case 'results': {
+        this.say([...stageResultLines(pub), ...this.explain('results')]);
+        this.setPhaseTimer(this.scaled(TIMING.resultsMs), { type: 'nextStage' });
         break;
       }
       case 'finished':
@@ -231,56 +282,57 @@ export class Room {
     }
   }
 
-  private scheduleBotPlays(): void {
-    const round = this.state.round;
+  // ---- Bots ----
+
+  private scheduleBotDraft(): void {
+    const s = this.state;
+    const teamId = s.draft ? s.draft.order[s.draft.idx] : null;
+    const team = s.teams.find((t) => t.id === teamId);
+    if (!team?.isBot) return;
+    this.after(
+      1200 + Math.random() * 1800,
+      () => {
+        if (this.state.phase !== 'draft' || this.state.draft?.order[this.state.draft.idx] !== team.id) return;
+        this.dispatch({ type: 'draftPick', teamId: team.id, source: botDraft(this.state, team.id, Math.random) });
+      },
+      true,
+    );
+  }
+
+  private scheduleBotTeams(): void {
     for (const t of this.state.teams) {
       if (!t.isBot) continue;
-      const delay = 2500 + Math.random() * 9000;
-      this.botTimers.push(
-        this.after(delay, () => {
-          if (this.state.phase !== 'play' || this.state.round !== round) return;
-          const plays = botPlays(this.state, t.id, Math.random);
-          this.dispatch({ type: 'play', teamId: t.id, plays });
-        }),
-      );
+      const step = () => {
+        if (this.state.phase !== 'team') return;
+        const next = botStep(this.state, t.id, Math.random);
+        if (next) {
+          this.dispatch(next);
+          this.after(700 + Math.random() * 900, step, true);
+        } else {
+          this.dispatch({ type: 'ready', teamId: t.id });
+        }
+      };
+      this.after(1500 + Math.random() * 3000, step, true);
     }
   }
 
-  private scheduledOffers = new Set<string>();
-
-  private scheduleBotTrades(): void {
+  private scheduleBotEfforts(): void {
     const round = this.state.round;
     for (const t of this.state.teams) {
       if (!t.isBot) continue;
-      if (!this.scheduledOffers.has(`ready:${round}:${t.id}`)) {
-        this.scheduledOffers.add(`ready:${round}:${t.id}`);
-        this.botTimers.push(
-          this.after(4000 + Math.random() * 6000, () => {
-            if (this.state.phase === 'trade' && this.state.round === round)
-              this.dispatch({ type: 'tradeReady', teamId: t.id });
-          }),
-        );
-      }
-    }
-    for (const o of this.state.offers) {
-      const to = this.state.teams.find((x) => x.id === o.to);
-      if (!to?.isBot || this.scheduledOffers.has(o.id)) continue;
-      this.scheduledOffers.add(o.id);
-      this.botTimers.push(
-        this.after(1500 + Math.random() * 2500, () => {
-          if (this.state.phase !== 'trade') return;
-          const live = this.state.offers.find((x) => x.id === o.id);
-          if (!live) return;
-          const team = this.state.teams.find((x) => x.id === o.to)!;
-          const can = !!matchSpecs(team.hand, live.want);
-          this.dispatch({ type: 'respond', teamId: o.to, offerId: o.id, accept: can && Math.random() < 0.6 });
-        }),
+      this.after(
+        2500 + Math.random() * 6000,
+        () => {
+          if (this.state.phase !== 'race' || this.state.round !== round) return;
+          this.dispatch({ type: 'effort', teamId: t.id, efforts: botEfforts(this.state, t.id, Math.random) });
+        },
+        true,
       );
     }
   }
 }
 
-// ---- Registry -----------------------------------------------------------------
+// ---- Register -----------------------------------------------------------------
 
 const rooms = new Map<string, Room>();
 
@@ -309,3 +361,6 @@ export function sweepRooms(maxIdleMs = 3 * 60 * 60 * 1000): void {
 export function send(ws: WebSocket, msg: ServerMsg): void {
   if (ws.readyState === 1) ws.send(JSON.stringify(msg));
 }
+
+// Voor de volledigheid: ClientMsg wordt in index.ts gebruikt.
+export type { ClientMsg };

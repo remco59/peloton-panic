@@ -1,9 +1,11 @@
-// Commentary: two straight-faced commentators describing a slightly absurd bike race.
-// Lines avoid pronouns on purpose: riders are named, never gendered.
+// Commentaar: twee commentatoren die vol ernst een licht absurde wielerwedstrijd beschrijven.
+// Regels vermijden persoonlijke voornaamwoorden: renners worden bij naam genoemd.
+// Met de tutorial aan leggen ze daarnaast per onderdeel uit hoe het spel werkt.
 
-import { COMMENTATORS, EVENTS, QUIRKS, TERRAINS } from './content';
+import { CARD_DEFS, COMMENTATORS, EVENTS, KIND_LABELS, STAGE_INFO } from './content';
 import type { CommentatorId } from './content';
 import type { PublicState, Rider } from './types';
+import { STAGES } from './types';
 
 export interface Line {
   speaker: CommentatorId;
@@ -17,29 +19,52 @@ const first = (name: string) => name.split(' ')[0];
 
 function teamLabel(s: PublicState, teamId: string): string {
   const t = s.teams.find((x) => x.id === teamId);
-  return t ? `${t.name}'s team` : 'the team';
+  return t ? `het team van ${t.name}` : 'het team';
 }
 
 function rider(s: PublicState, id: string): Rider {
   return s.riders.find((r) => r.id === id)!;
 }
 
+// ---- Gewone commentaar -------------------------------------------------------
+
 export function introLines(s: PublicState): Line[] {
   const n = s.teams.length;
   const socks = s.riders.find((r) => r.quirk === 'socks');
   const out: Line[] = [
-    j(
-      `Good afternoon, and welcome to Peloton Panic. ${n} teams are on the start line, and the weather is, frankly, absurdly pleasant.`,
-    ),
+    j(`Goedemiddag en welkom bij Peloton Panic. ${n} ploegen staan aan de start van een seizoen van ${STAGES} etappes.`),
   ];
   if (socks)
-    out.push(
-      m(
-        `Johan, I have studied the start list. ${first(socks.name)} is wearing mismatched socks. That always worries me.`,
-      ),
-    );
-  else out.push(m('Johan, the legs look good, the bikes look shiny. Somebody is going to ruin it.'));
+    out.push(m(`Johan, ik heb de startlijst bekeken. ${first(socks.name)} draagt verschillende sokken. Dat baart me zorgen.`));
+  else out.push(m('Johan, de benen zien er goed uit en de fietsen glimmen. Iemand gaat dat straks verpesten.'));
   return out;
+}
+
+export function stageLines(s: PublicState): Line[] {
+  const info = STAGE_INFO[Math.min(STAGES, s.stage) - 1];
+  return [j(`${info.name}. ${info.blurb}`), m('Eerst de voorbereiding. Wie nu slim kiest, plukt daar straks de vruchten van.')];
+}
+
+export function pickLines(teamName: string, def: string): Line[] {
+  const d = CARD_DEFS[def];
+  if (!d) return [];
+  const bits: Record<string, string[]> = {
+    training: ['Daar wordt hard voor getraind.', 'Wie traint, die wint. In theorie.'],
+    sponsor: ['Dat is een slimme zet: geld is altijd welkom.', 'Een sponsor in de pocket. Dat komt goed uit.'],
+    staff: ['Goede staf is goud waard.', 'Dat wordt een drukke dag voor de staf.'],
+    material: ['Goed materiaal maakt het verschil.', 'Het materiaal gaat een stap vooruit.'],
+    car: ['Een ploegwagen volgt je door dik en dun.', 'De wagen rijdt straks mooi achter de groep.'],
+    sabotage: ['Hm. Dat is geen vriendelijke kaart.', 'Iemand heeft kwaad in de zin.'],
+  };
+  const t = `${teamName} pakt ${d.name}. ${choice(bits[d.kind] ?? [''])}`.trim();
+  return Math.random() < 0.6 ? [(Math.random() < 0.5 ? j : m)(t)] : [];
+}
+
+export function teamPhaseLines(s: PublicState): Line[] {
+  return [
+    j(`Voorbereiding voor etappe ${s.stage}. De ploegen trainen, kopen spullen en beraden zich over hun tactiek.`),
+    m('Vergeet niet te ruilen. Wie praat, wint soms ook.'),
+  ];
 }
 
 export function eventLines(s: PublicState): Line[] {
@@ -47,36 +72,36 @@ export function eventLines(s: PublicState): Line[] {
   const def = EVENTS[s.event.id];
   const target = s.event.targetRiderId ? rider(s, s.event.targetRiderId) : null;
   const team = s.event.targetTeamId ? teamLabel(s, s.event.targetTeamId) : null;
-  const head = `Round ${s.round}.`;
+  const head = `Ronde ${s.round}.`;
   switch (s.event.id) {
     case 'calm':
-      return [j(`${head} Calm conditions out there. Nothing to report.`), m('Which is exactly when something happens.')];
+      return [j(`${head} Rustig weer. Niets te melden.`), m('En dat is precies het moment waarop er iets gebeurt.')];
     case 'tailwind':
-      return [j(`${head} A tailwind has picked up. Everyone gets a little push.`), m('Free speed. Nobody should complain, but they will.')];
+      return [j(`${head} Er staat meewind. Iedereen krijgt een duwtje.`), m('Gratis snelheid. Niemand klaagt, maar ze doen het toch.')];
     case 'headwind':
-      return [j(`${head} Headwind. The riders are going to feel every metre.`), m('Wind-hardened riders will laugh at this. Everyone else will suffer.')];
+      return [j(`${head} Tegenwind. De renners voelen elke meter.`), m('Windgeharde renners lachen erom. De rest lijdt.')];
     case 'crosswind':
-      return [j(`${head} Crosswind! The peloton is splitting into echelons.`), m('No drafting this round. Everyone is on their own.')];
+      return [j(`${head} Zijwind! Het peloton splitst in waaiers.`), m('Geen drafting deze ronde. Iedereen staat er alleen voor.')];
     case 'rain':
-      return [j(`${head} Rain is falling. The descents and cobbles are suddenly very slippery.`), m('Careful out there. Mudguards would have been nice.')];
+      return [j(`${head} Het regent. Afdalingen en kasseien zijn spekglad.`), m('Voorzichtig daar. Spatborden waren leuk geweest.')];
     case 'feedzone':
-      return [j(`${head} The feed zone! Soigneurs are handing out bags.`), m('Everyone draws an extra card. Mostly sandwiches, I think.')];
+      return [j(`${head} De bevoorrading! Soigneurs delen tassen uit.`), m('Iedereen krijgt twee energie terug. Vooral broodjes, vermoed ik.')];
     case 'crowd':
-      return [j(`${head} The crowd is roaring on the climbs.`), m('Climbers love this. Plus one on every ascent.')];
+      return [j(`${head} Het publiek juicht op de klim.`), m('Klimmers zijn dol op dit. Plus één op elke klim.')];
     case 'chicken':
       return [
-        j(`${head} Unbelievable scenes. A spectator in a chicken costume is on the road!`),
-        m(target ? `${first(target.name)} is in front, and has to brake. That is minus two.` : 'The leader has to brake.'),
+        j(`${head} Ongelooflijke taferelen. Een toeschouwer in kippenpak staat op de weg!`),
+        m(target ? `${first(target.name)} voorop moet remmen. Min twee.` : 'De koploper moet remmen.'),
       ];
     case 'wrongTurn':
       return [
-        j(`${head} ${team ?? 'A team'} is in trouble. The team car has followed the wrong bus.`),
-        m('That is a disaster for morale, and for the drinks.'),
+        j(`${head} ${team ?? 'Een team'} heeft problemen. De volgauto volgt de verkeerde bus.`),
+        m('Dat is een drama voor de moraal, en voor de bidons.'),
       ];
     case 'sandwich':
       return [
-        j(`${head} A soigneur hands ${target ? first(target.name) : 'a rider'} a sandwich. Nobody knows what is in it.`),
-        m('Plus three speed, but a tired card follows. Trade-offs, Johan.'),
+        j(`${head} Een soigneur geeft ${target ? first(target.name) : 'een renner'} een broodje. Niemand weet wat erop zit.`),
+        m('Plus drie snelheid, min twee energie. Afwegingen, Johan.'),
       ];
     default:
       return [j(`${head} ${def.title}. ${def.blurb}`)];
@@ -91,76 +116,154 @@ export function roundLines(s: PublicState): Line[] {
   const prev = rider(s, rep.prevLeaderRiderId);
 
   if (rep.finished) {
-    out.push(j(`${first(leader.name)} is across the line first! ${teamLabel(s, leader.teamId)} take the stage.`));
+    out.push(j(`${first(leader.name)} komt als eerste over de streep! ${teamLabel(s, leader.teamId)} wint de etappe.`));
     return out;
   }
 
-  if (leader.id !== prev.id && leader.teamId !== prev.teamId) {
-    out.push(
-      j(`${first(leader.name)} takes over at the front for ${teamLabel(s, leader.teamId)}.`),
-    );
-  } else {
-    out.push(j(`${first(leader.name)} keeps the lead. ${s.trackLength - Math.floor(leader.pos)} tiles to go.`));
-  }
+  if (leader.id !== prev.id && leader.teamId !== prev.teamId)
+    out.push(j(`${first(leader.name)} neemt de leiding over voor ${teamLabel(s, leader.teamId)}.`));
+  else out.push(j(`${first(leader.name)} blijft aan kop. Nog ${Math.max(0, s.trackLength - Math.floor(leader.pos))} tegels te gaan.`));
 
+  const pech = rep.moves.filter((x) => x.pech);
+  const shielded = rep.moves.filter((x) => x.shielded);
+  const empty = rep.moves.filter((x) => x.exhausted);
   const flying = [...rep.moves].sort((a, b) => b.to - b.from - (a.to - a.from))[0];
-  if (flying && flying.to - flying.from >= 6) {
-    out.push(m(`${first(rider(s, flying.riderId).name)} is flying. ${flying.to - flying.from} tiles in one go.`));
+
+  if (pech.length > 0) {
+    const r = rider(s, choice(pech).riderId);
+    out.push(m(`${first(r.name)} heeft pech. Een lekke band op het slechtst denkbare moment.`));
+  } else if (shielded.length > 0) {
+    const r = rider(s, shielded[0].riderId);
+    out.push(m(`Pech voor ${first(r.name)}, maar de reservefiets staat klaar. Dat scheelt een heleboel.`));
+  } else if (empty.length > 0) {
+    const r = rider(s, choice(empty).riderId);
+    out.push(m(`${first(r.name)} is op de fles. De benen zijn leeg, en dat zie je.`));
+  } else if (flying && flying.to - flying.from >= 8) {
+    out.push(m(`${first(rider(s, flying.riderId).name)} vliegt. ${flying.to - flying.from} tegels in één ronde.`));
   } else {
     const wind = rep.moves.find((x) => x.windPaid);
     if (wind) {
       const r = rider(s, wind.riderId);
-      out.push(m(`${first(r.name)} is doing all the work at the front. That is going to cost ${teamLabel(s, r.teamId)} later.`));
+      out.push(m(`${first(r.name)} doet al het werk aan kop. Dat gaat ${teamLabel(s, r.teamId)} nog kosten.`));
     }
   }
 
-  const chasers = rep.moves.filter((x) => x.parts.chase > 0);
-  if (chasers.length > 0 && out.length < 3) {
-    const r = rider(s, choice(chasers).riderId);
-    out.push(j(`${first(r.name)} has been dropped, and the peloton is already pulling a gap back.`));
-  }
-
-  const croissant = rep.moves.find((x) => {
-    const r = rider(s, x.riderId);
-    return r.quirk === 'croissant' && x.cardValue !== null && x.cardValue <= 2 && x.cardKind === 'energy';
-  });
-  if (croissant && out.length < 3 && Math.random() < 0.5) {
-    out.push(m(`${first(rider(s, croissant.riderId).name)} is riding on croissants. Cheap energy, and it works.`));
+  const service = rep.moves.find((x) => x.service);
+  if (service && out.length < 3) {
+    const r = rider(s, service.riderId);
+    out.push(j(`De volgauto komt langszij bij ${first(r.name)}. Een bidon en een duwtje: nieuwe energie.`));
   }
 
   if (out.length < 3 && Math.random() < 0.2) {
     const socks = s.riders.find((r) => r.quirk === 'socks');
-    if (socks) out.push(m(`I must mention ${first(socks.name)}'s socks again. One is green. The other is also green, but a different green.`));
+    if (socks) out.push(m(`Ik moet de sokken van ${first(socks.name)} nog even noemen. Eén is groen, de ander ook, maar een andere groen.`));
   }
   return out.slice(0, 3);
 }
 
-export function tradeLines(s: PublicState): Line[] {
-  if (Math.random() > 0.5) return [];
-  return [
-    choice([
-      j('Plenty of talking in the bunch. Deals are being made.'),
-      m('This is the part nobody puts in the highlights: the quiet little pacts.'),
-      j('Riders are comparing cards. Allegedly. Nobody has seen anything.'),
-    ]),
+export function stageResultLines(s: PublicState): Line[] {
+  const r = s.stageResult;
+  if (!r) return [];
+  const winnerTeam = [...r.teams].sort((a, b) => b.stagePoints - a.stagePoints)[0];
+  const winner = s.teams.find((t) => t.id === winnerTeam.teamId)!;
+  const lantern = s.teams.find((t) => t.id === r.lanterneRougeTeamId)!;
+  const top = rider(s, r.ranking[0].riderId);
+  const out: Line[] = [
+    j(`Wat een finish. ${first(top.name)} wint de etappe, en ${winner.name} pakt de meeste punten.`),
+    m(`En de rode lantaarn gaat naar ${lantern.name}. Een mooie traditie. Je krijgt er een troostkaart bij.`),
   ];
+  const sab = r.sabotages[0];
+  if (sab) {
+    const from = s.teams.find((t) => t.id === sab.fromTeamId)!;
+    const to = s.teams.find((t) => t.id === sab.toTeamId)!;
+    out.push(j(`En nu de waarheid: ${from.name} bleek ${CARD_DEFS[sab.def]?.name.toLowerCase() ?? 'sabotage'} te hebben ingezet tegen ${to.name}.`));
+  }
+  return out;
 }
 
 export function finishLines(s: PublicState): Line[] {
-  const r = s.results;
+  const r = s.season;
   if (!r) return [];
   const winner = s.teams.find((t) => t.id === r.winnerTeamId)!;
   const lantern = s.teams.find((t) => t.id === r.lanterneRougeTeamId)!;
-  const topRider = rider(s, r.ranking[0].riderId);
   return [
-    j(`What a finish. ${first(topRider.name)} wins the stage, and ${winner.name}'s team takes the day on points.`),
-    m(`And the red lantern goes to ${lantern.name}'s team. A proud tradition. Wear it well.`),
+    j(`Het seizoen is voorbij. ${winner.name} is de grote winnaar en mag de bloemen in ontvangst nemen.`),
+    m(`En de rode lantaarn gaat naar ${lantern.name}. Draag hem met trots, want ook dat moet iemand doen.`),
   ];
+}
+
+// ---- Tutorial ----------------------------------------------------------------
+
+export type TutorialTopic =
+  | 'intro'
+  | 'draft'
+  | 'team'
+  | 'race'
+  | 'resolve'
+  | 'exhausted'
+  | 'results'
+  | 'fade'
+  | 'season';
+
+/** Uitleg die alleen verschijnt als de tutorial aan staat. Elk onderwerp komt één keer. */
+export function tutorialLines(topic: TutorialTopic, s: PublicState): Line[] {
+  switch (topic) {
+    case 'intro':
+      return [
+        j('Even hoe dit werkt. Jullie managen elk een ploeg van drie renners en spelen een seizoen van drie etappes.'),
+        m('Elke etappe heeft drie delen: eerst de voorbereiding, dan de race, en daarna de uitslag met beloningen.'),
+        j('Jullie telefoon is jullie teambord. Op de tv zien jullie de gezamenlijke markt en de race.'),
+      ];
+    case 'draft':
+      return [
+        j('We beginnen met de draft. Op de tv ligt een markt met vijf kaarten. Om de beurt pak je er een.'),
+        m('Je pakt een kaart uit de markt, of een onbekende van de stapel. Het team onderaan het klassement mag als eerste.'),
+        j('Er zijn trainingskaarten, sponsors, staf, materiaal en wagens. En sabotage, voor wie durft.'),
+      ];
+    case 'team':
+      return [
+        j('Nu de voorbereiding. Gebruik je kaarten op je telefoon. Een trainingskaart geef je aan een renner, die wordt dan sterker.'),
+        m('Maar let op: training kost vermoeidheid. Te veel trainen betekent overtraining, en dan word je juist zwakker.'),
+        j('Spullen zoals een sponsor, staf of reservefiets leg je op je bord. Die werken de hele etappe.'),
+        m('Met munten koop je extra kaarten in de winkel, en je kunt kaarten ruilen met andere teams. Druk op Klaar als je er zin in hebt.'),
+      ];
+    case 'race':
+      return [
+        j('De race begint. Elke ronde kies je per renner een tempo: Rustig, Normaal of Alles geven.'),
+        m('Alles geven is het snelst, maar het kost drie energie. Rustig herstelt juist wat. Heb je geen energie meer, dan ben je op de fles.'),
+        j('Je energie en je training bepalen hoe ver je rijdt. Hoe beter je voorbereid bent, hoe meer je eruit haalt.'),
+      ];
+    case 'resolve':
+      return [
+        m('Kijk naar het peloton. Wie vlak achter een andere renner rijdt, drafting: gratis een extra tegel.'),
+        j('De renner aan kop betaalt de wind: een extra energie. Voorop rijden is dapper, maar het kost wat.'),
+        m('En er kan pech zijn. Een lekke band, een val. Een reservefiets of mecanicien vangt dat op.'),
+      ];
+    case 'exhausted':
+      return [
+        j('Een renner zonder energie is op de fles. Die kan niet meer vol gas en rijdt een tegel minder.'),
+        m('Los het op door Rustig te rijden, of met een soigneur, een volgauto of voeding in de voorbereiding.'),
+      ];
+    case 'results':
+      return [
+        j('De uitslag. De top zes renners scoort punten, en elk team krijgt munten voor de einduitslag en voor sponsors.'),
+        m('Het podium krijgt bonuskaarten. De rode lantaarn krijgt een troostkaart en twee munten, zodat je kunt terugkomen.'),
+        j('Let op: je training vervaagt na elke etappe met één punt. Wat je nu opbouwt, is straks deels weg.'),
+      ];
+    case 'fade':
+      return [
+        m('Je renners zijn ouder en moe. Training vervaagt, en vermoeidheid zakt maar langzaam. Plan je rustdagen.'),
+        j('Wie het hele seizoen slim bouwt, is op het einde de sterkste. Succes met etappe twee.'),
+      ];
+    case 'season':
+      return [
+        j('Na drie etappes tellen we de punten op. Wie het meeste heeft, wint het seizoen. De laatste krijgt de rode lantaarn.'),
+      ];
+  }
 }
 
 export function whoIs(id: CommentatorId): string {
   return COMMENTATORS[id].name;
 }
 
-// Re-exported for the UI so it only has to import from one place.
-export { QUIRKS, TERRAINS };
+export { KIND_LABELS };

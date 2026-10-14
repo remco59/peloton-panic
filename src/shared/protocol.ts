@@ -1,23 +1,32 @@
 import type { Line } from './commentary';
-import type { CardSpec, PlayerView, PublicState } from './types';
+import type { Effort, PickSource, PlayerView, PublicState } from './types';
 
-/** Actions a phone may ask for. The server fills in the team id from the connection. */
+/** Acties die een telefoon mag vragen. De server vult het team-id in vanuit de verbinding. */
 export type PlayerAction =
   | { type: 'nameRiders'; names: string[] }
-  | { type: 'play'; plays: Record<string, string | null> }
-  | { type: 'unlock' }
-  | { type: 'offer'; to: string; give: string[]; want: CardSpec[] }
+  | { type: 'draftPick'; source: PickSource }
+  | { type: 'draftSkip' }
+  | { type: 'buy'; source: PickSource }
+  | { type: 'train'; cardId: string; riderId: string }
+  | { type: 'install'; cardId: string; replaceDef?: string }
+  | { type: 'sabotage'; cardId: string; targetTeamId: string }
+  | { type: 'offer'; to: string; give: string[]; giveCoins: number; want: string[]; wantCoins: number }
   | { type: 'withdraw' }
   | { type: 'respond'; offerId: string; accept: boolean }
-  | { type: 'tradeReady' };
+  | { type: 'ready' }
+  | { type: 'unready' }
+  | { type: 'effort'; efforts: Record<string, Effort> }
+  | { type: 'unlock' };
 
 // ---- client -> server ----
+export type PresidentAction = 'start' | 'addBot' | 'removeBot' | 'rematch' | 'nextStage' | 'tutorialOn' | 'tutorialOff';
+
 export type ClientMsg =
   | { t: 'tv:create'; origin: string }
   | { t: 'tv:resume'; code: string; origin: string }
   | { t: 'player:join'; code: string; name: string; token?: string }
   | { t: 'act'; action: PlayerAction }
-  | { t: 'president'; what: 'start' | 'addBot' | 'rematch' | 'removeBot' };
+  | { t: 'president'; what: PresidentAction };
 
 export interface FeedBatch {
   id: number;
