@@ -40,7 +40,7 @@ export function ttsAvailable(): boolean {
 
 function keyFor(speaker: CommentatorId, text: string): string {
   const c = COMMENTATORS[speaker];
-  return createHash('sha1').update(`${c.voice}|${c.rate}|${c.pitch}|${text}`).digest('hex');
+  return createHash('sha1').update(`${c.voice}|${c.rate}|${c.pitch}|${c.volume}|${text}`).digest('hex');
 }
 
 async function slot<T>(fn: () => Promise<T>): Promise<T> {
@@ -61,6 +61,7 @@ function runEdge(bin: string, speaker: CommentatorId, text: string, outFile: str
     `--voice=${c.voice}`,
     `--rate=${c.rate}`,
     `--pitch=${c.pitch}`,
+    `--volume=${c.volume}`,
     `--text=${text}`,
     `--write-media=${outFile}`,
   ];

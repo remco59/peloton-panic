@@ -1,5 +1,6 @@
-import { render } from 'preact';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { createContext, render } from 'preact';
+import { createPortal } from 'preact/compat';
+import { useContext, useEffect, useRef, useState } from 'preact/hooks';
 import '../common/theme.css';
 import './play.css';
 import {
@@ -108,39 +109,67 @@ function markSeen(id: string) {
   }
 }
 
-/** Uitleg bij de huidige fase (alleen met tutorial aan). Weg te klikken, en terug te halen. */
+/** Bottom sheet: de plek voor alles wat het hoofdscherm niet altijd nodig heeft. */
+function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: preact.ComponentChildren }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div class="sheet-wrap" onClick={onClose}>
+      <div class="sheet" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
+        <div class="sheet-grip" />
+        <div class="sheet-head">
+          <b class="sheet-title">{title}</b>
+          <button class="x" onClick={onClose} aria-label="Sluiten">
+            ✕
+          </button>
+        </div>
+        <div class="sheet-body">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/** Waar de "?"-knop van de uitleg in de kopbalk terechtkomt. */
+const HintSlot = createContext<HTMLElement | null>(null);
+
+/** Uitleg bij de huidige fase (alleen met tutorial aan): een sheet, terug te halen met "?" in de kopbalk. */
 function TutorialHint({ hint }: { hint: Hint | null }) {
+  const slot = useContext(HintSlot);
   const id = hint?.id;
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   useEffect(() => setOpen(id ? !seenHints().has(id) : false), [id]);
   if (!hint) return null;
-  if (!open)
-    return (
-      <button class="hint-open" onClick={() => setOpen(true)}>
-        ? Uitleg: {hint.title}
-      </button>
-    );
+  const close = () => {
+    markSeen(hint.id);
+    setOpen(false);
+  };
   return (
-    <div class="hint">
-      <div class="hint-head">
-        <span class="small">Uitleg</span>
-        <b>{hint.title}</b>
-      </div>
-      <ol>
-        {hint.steps.map((t, i) => (
-          <li key={i}>{t}</li>
-        ))}
-      </ol>
-      <button
-        class="small-btn"
-        onClick={() => {
-          markSeen(hint.id);
-          setOpen(false);
-        }}
-      >
-        Begrepen
-      </button>
-    </div>
+    <>
+      {slot &&
+        createPortal(
+          <button class="hint-btn" onClick={() => setOpen(true)} aria-label={`Uitleg: ${hint.title}`}>
+            ?
+          </button>,
+          slot,
+        )}
+      {open && (
+        <Sheet title={hint.title} onClose={close}>
+          <div class="hint">
+            <ol>
+              {hint.steps.map((t, i) => (
+                <li key={i}>{t}</li>
+              ))}
+            </ol>
+          </div>
+          <button class="big primary ty" onClick={close}>
+            BEGREPEN
+          </button>
+        </Sheet>
+      )}
+    </>
   );
 }
 
@@ -362,6 +391,7 @@ function Game({
   leave,
 }: GameProps & { error: string | null; online: boolean; clock: () => number; leave: () => void }) {
   useNow(500);
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
   const { state, me, teamId } = view;
   const team = state.teams.find((t) => t.id === teamId);
   const col = TEAM_COLORS[(team?.color ?? 0) % TEAM_COLORS.length];
@@ -387,7 +417,7 @@ function Game({
     results: 'Uitslag',
     finished: 'Eindstand',
   };
-  const stageTag = state.phase === 'lobby' ? '' : `Etappe ${state.stage}/${STAGES} · `;
+  const stageTag = state.phase === 'lobby' || state.phase === 'finished' ? '' : `E${state.stage}/${STAGES} · `;
 
   return (
     <div class="game" style={{ '--team': col.hex } as Record<string, string>}>
@@ -400,19 +430,94 @@ function Game({
           {title[state.phase]}
         </span>
         <span class="tm ty">{left !== null && state.phase !== 'resolve' ? `${left}s` : ''}</span>
+        <span class="hint-slot" ref={setSlot} />
       </header>
       {!online && <div class="offline">Opnieuw verbinden...</div>}
       {error && <div class="err">{error}</div>}
-      <main>
-        {state.phase === 'lobby' && <Lobby view={view} act={act} president={president} />}
-        {state.phase === 'draft' && <Draft view={view} act={act} />}
-        {state.phase === 'team' && <TeamPhase view={view} act={act} />}
-        {state.phase === 'race' && <Race view={view} act={act} />}
-        {state.phase === 'resolve' && <Resolve view={view} />}
-        {state.phase === 'results' && <Results view={view} president={president} />}
-        {state.phase === 'finished' && <Finished view={view} president={president} />}
-      </main>
+      <HintSlot.Provider value={slot}>
+        <main key={state.phase}>
+          {state.phase === 'lobby' && <Lobby view={view} act={act} president={president} />}
+          {state.phase === 'draft' && <Draft view={view} act={act} />}
+          {state.phase === 'team' && <TeamPhase view={view} act={act} />}
+          {state.phase === 'race' && <Race view={view} act={act} />}
+          {state.phase === 'resolve' && <Resolve view={view} />}
+          {state.phase === 'results' && <Results view={view} president={president} />}
+          {state.phase === 'finished' && <Finished view={view} president={president} />}
+        </main>
+      </HintSlot.Provider>
     </div>
+  );
+}
+
+/** Kaart als compacte tegel of rij; de details en acties staan in een sheet. */
+function CardTile({ def, price, dim, onClick }: { def: string; price?: boolean; dim?: boolean; onClick: () => void }) {
+  const d = CARD_DEFS[def];
+  if (!d) return null;
+  return (
+    <button class={`ctile ${dim ? 'dim' : ''}`} style={{ '--k': KIND_COLORS[d.kind] } as Record<string, string>} onClick={onClick}>
+      <span class="ct-main">
+        <span class="ct-kind ty">{KIND_LABELS[d.kind]}</span>
+        <span class="ct-name">{d.name}</span>
+      </span>
+      {price && <span class="ct-price ty">€ {d.price}</span>}
+    </button>
+  );
+}
+
+/** Rijtje strip-knoppen onder de kopbalk: klein label + waarde, opent een sheet. */
+function StripBtn({ label, value, onClick, tone, disabled }: { label: string; value: string; onClick: () => void; tone?: string; disabled?: boolean }) {
+  return (
+    <button class={`strip-btn ${tone ?? ''}`} onClick={onClick} disabled={disabled}>
+      <span class="small">{label}</span>
+      <b>{value}</b>
+    </button>
+  );
+}
+
+function RiderSheet({ rider, state, onClose, race, perks, bidon }: {
+  rider: Rider;
+  state: PublicState;
+  onClose: () => void;
+  race?: boolean;
+  perks: ReturnType<typeof perksOf>;
+  bidon: boolean;
+}) {
+  const t = RIDER_TYPES[rider.type];
+  const q = QUIRKS[rider.quirk];
+  const terrain = terrainAt(state, rider.pos);
+  const limit = 2 + perks.overtrainTolerance;
+  const over = rider.fatigue > limit;
+  return (
+    <Sheet title={rider.name} onClose={onClose}>
+      <div class="stack tight">
+        <div>
+          <div class="small">{t.label}</div>
+          <div>{t.blurb}</div>
+        </div>
+        <div>
+          <div class="small">{q.label}</div>
+          <div>{q.blurb}</div>
+        </div>
+        {race && (
+          <div>
+            <div class="small">Nu</div>
+            <div>
+              {TERRAINS[terrain].label}, nog {state.trackLength - Math.floor(rider.pos)} tegels te gaan. Energie {rider.energy}/{rider.maxEnergy}.
+              {rider.energy <= 0 && ' Op de fles: je kunt alleen Rustig rijden.'}
+              {state.event?.targetRiderId === rider.id && ' Doelwit van de gebeurtenis.'}
+            </div>
+            <p class="dim s mt">De tegels bij een tempo zijn een schatting: drafting, wind en geluk komen er nog bij.</p>
+          </div>
+        )}
+        {!race && (
+          <div>
+            <div class="small">Start met</div>
+            <div>{maxEnergyFor(rider, perks, bidon)} energie</div>
+          </div>
+        )}
+        {over && <div class="warn-s">Overtraind: alle eigenschappen {rider.fatigue - limit} lager. Neem een rustdag!</div>}
+      </div>
+    </Sheet>
   );
 }
 
@@ -420,67 +525,85 @@ function Game({
 
 function Lobby({ view, act, president }: GameProps) {
   const { state, teamId } = view;
-  const team = state.teams.find((t) => t.id === teamId)!;
   const isPresident = view.presidentTeamId === teamId;
   const mine = state.riders.filter((r) => r.teamId === teamId);
   const [names, setNames] = useState(mine.map((r) => r.name));
+  const [info, setInfo] = useState<number | null>(null);
   const hasBot = state.teams.some((t) => t.isBot);
   const enough = state.teams.length >= 2;
+  const r = info !== null ? mine[info] : null;
   return (
-    <section class="stack">
+    <section class="screen">
       <TutorialHint hint={hintFor(view, {})} />
-      <p class="dim">
-        Je bent manager van het team van <b>{team.name}</b>. Geef je drie renners een naam, of houd de willekeurige namen.
-      </p>
-      {mine.map((r, i) => (
-        <div class="rider-edit frame" key={r.id}>
-          <div class="small">{RIDER_TYPES[r.type].label}</div>
-          <input
-            value={names[i] ?? ''}
-            maxLength={20}
-            onInput={(e) => {
-              const next = [...names];
-              next[i] = (e.target as HTMLInputElement).value;
-              setNames(next);
-            }}
-            onBlur={() => act({ type: 'nameRiders', names })}
-          />
-          <div class="quirk">
-            <b>{QUIRKS[r.quirk].label}.</b> {QUIRKS[r.quirk].blurb}
-          </div>
-        </div>
-      ))}
-      <p class="dim">{state.teams.length} team(s) in het peloton.</p>
-      {isPresident ? (
-        <div class="stack">
-          <p class="crown">JIJ BENT DE PRESIDENT</p>
-          <label class="toggle frame">
+      <p class="dim">Geef je drie renners een naam, of houd de willekeurige namen.</p>
+      <div class="grow stack">
+        {mine.map((rd, i) => (
+          <div class="rider-edit frame" key={rd.id}>
+            <div class="re-head">
+              <span class="small">{RIDER_TYPES[rd.type].label}</span>
+              <button class="info" onClick={() => setInfo(i)} aria-label={`Over ${names[i] || rd.name}`}>
+                i
+              </button>
+            </div>
             <input
-              type="checkbox"
-              checked={state.tutorial}
-              onChange={(e) => president((e.target as HTMLInputElement).checked ? 'tutorialOn' : 'tutorialOff')}
+              value={names[i] ?? ''}
+              maxLength={20}
+              onInput={(e) => {
+                const next = [...names];
+                next[i] = (e.target as HTMLInputElement).value;
+                setNames(next);
+              }}
+              onBlur={() => act({ type: 'nameRiders', names })}
             />
-            <span>
-              <b>Tutorial-modus</b>
-              <br />
-              <span class="dim">De commentatoren leggen onderweg uit hoe het spel werkt. Aanrader voor een eerste keer.</span>
-            </span>
-          </label>
-          <div class="row2">
-            <button class="big ty" onClick={() => president('addBot')} disabled={state.teams.length >= 6}>
-              + BOT
-            </button>
-            <button class="big ty" onClick={() => president('removeBot')} disabled={!hasBot}>
-              - BOT
-            </button>
           </div>
-          <button class="big primary ty" disabled={!enough} onClick={() => president('start')}>
-            START HET SEIZOEN
-          </button>
-          {!enough && <p class="dim">Je hebt minstens 2 teams nodig. Voeg een bot toe om alleen te proberen.</p>}
-        </div>
-      ) : (
-        <p class="dim">Wachten tot de president het seizoen start.</p>
+        ))}
+      </div>
+      <div class="dock">
+        {isPresident ? (
+          <>
+            <label class="toggle frame">
+              <input
+                type="checkbox"
+                checked={state.tutorial}
+                onChange={(e) => president((e.target as HTMLInputElement).checked ? 'tutorialOn' : 'tutorialOff')}
+              />
+              <span>
+                <b>Tutorial-modus</b>
+                <span class="dim s"> · uitleg onderweg</span>
+              </span>
+            </label>
+            <div class="bots">
+              <button class="small-btn" onClick={() => president('removeBot')} disabled={!hasBot}>
+                − Bot
+              </button>
+              <span class="small">{state.teams.length} teams</span>
+              <button class="small-btn" onClick={() => president('addBot')} disabled={state.teams.length >= 6}>
+                + Bot
+              </button>
+            </div>
+            <button class="big primary ty" disabled={!enough} onClick={() => president('start')}>
+              {enough ? 'START HET SEIZOEN' : 'VOEG EEN BOT TOE'}
+            </button>
+          </>
+        ) : (
+          <p class="dim center">
+            {state.teams.length} team(s) in het peloton. Wachten tot de president het seizoen start.
+          </p>
+        )}
+      </div>
+      {r && (
+        <Sheet title={names[info!] || r.name} onClose={() => setInfo(null)}>
+          <div class="stack tight">
+            <div>
+              <div class="small">{RIDER_TYPES[r.type].label}</div>
+              <div>{RIDER_TYPES[r.type].blurb}</div>
+            </div>
+            <div>
+              <div class="small">{QUIRKS[r.quirk].label}</div>
+              <div>{QUIRKS[r.quirk].blurb}</div>
+            </div>
+          </div>
+        </Sheet>
       )}
     </section>
   );
@@ -494,62 +617,76 @@ function Draft({ view, act }: ViewProps) {
   const mine = !!me?.pickPending;
   const current = d.currentTeamId ? state.teams.find((t) => t.id === d.currentTeamId) : null;
   const picksLeft = d.order.slice(d.idx).filter((id) => id === view.teamId).length;
+  const [pick, setPick] = useState<number | null>(null);
+  const [hand, setHand] = useState(false);
+  const cards = me?.hand ?? [];
+  const def = pick !== null ? state.market[pick] : undefined;
   return (
-    <section class="stack">
+    <section class="screen">
       <TutorialHint hint={hintFor(view, { myTurn: mine })} />
       <div class={`turn frame ${mine ? 'mine' : ''}`}>
         {mine ? (
           <>
             <div class="ty">JIJ BENT AAN DE BEURT</div>
-            <p>Pak een kaart van de markt, of trek een onbekende van de stapel.</p>
+            <p>Tik op een kaart om hem te pakken, of trek van de stapel.</p>
           </>
         ) : (
           <>
             <div class="ty">{current ? `${current.name} KIEST` : 'DRAFT KLAAR'}</div>
-            <p class="dim">Jij hebt nog {picksLeft} keuze{picksLeft === 1 ? '' : 's'}. Kijk alvast wat er ligt.</p>
+            <p class="dim">Jij hebt nog {picksLeft} keuze{picksLeft === 1 ? '' : 's'}.</p>
           </>
         )}
       </div>
-      <div class="small">De markt ({state.deckCount} kaarten op de stapel)</div>
-      <div class="list">
-        {state.market.map((def, i) => (
-          <CardRow key={i} def={def}>
+      <div class="small">De markt · {state.deckCount} kaarten op de stapel</div>
+      <div class="list grow">
+        {state.market.map((m, i) => (
+          <CardTile key={i} def={m} onClick={() => setPick(i)} />
+        ))}
+      </div>
+      <div class="dock">
+        {mine && (
+          <div class="row2">
+            <button class="big" onClick={() => act({ type: 'draftPick', source: { kind: 'deck' } })}>
+              Van de stapel
+            </button>
+            <button class="big" onClick={() => act({ type: 'draftSkip' })}>
+              Overslaan
+            </button>
+          </div>
+        )}
+        <button class="big" disabled={cards.length === 0} onClick={() => setHand(true)}>
+          Jouw kaarten ({cards.length})
+        </button>
+      </div>
+      {def && (
+        <Sheet title="Kaart uit de markt" onClose={() => setPick(null)}>
+          <CardRow def={def}>
             {mine && (
-              <button class="small-btn primary" onClick={() => act({ type: 'draftPick', source: { kind: 'market', index: i } })}>
+              <button
+                class="small-btn primary"
+                onClick={() => {
+                  act({ type: 'draftPick', source: { kind: 'market', index: pick! } });
+                  setPick(null);
+                }}
+              >
                 Pak deze
               </button>
             )}
           </CardRow>
-        ))}
-      </div>
-      {mine && (
-        <div class="row2">
-          <button class="big" onClick={() => act({ type: 'draftPick', source: { kind: 'deck' } })}>
-            Trek van de stapel
-          </button>
-          <button class="big" onClick={() => act({ type: 'draftSkip' })}>
-            Overslaan
-          </button>
-        </div>
+        </Sheet>
       )}
-      <HandSummary hand={me?.hand ?? []} />
+      {hand && (
+        <Sheet title={`Jouw kaarten (${cards.length})`} onClose={() => setHand(false)}>
+          <div class="chips">
+            {cards.map((c) => (
+              <span class="asset" key={c.id} style={{ '--k': KIND_COLORS[CARD_DEFS[c.def].kind] } as Record<string, string>}>
+                {CARD_DEFS[c.def].name}
+              </span>
+            ))}
+          </div>
+        </Sheet>
+      )}
     </section>
-  );
-}
-
-function HandSummary({ hand }: { hand: Card[] }) {
-  if (hand.length === 0) return null;
-  return (
-    <div class="frame">
-      <div class="small">Jouw kaarten ({hand.length})</div>
-      <div class="chips mt">
-        {hand.map((c) => (
-          <span class="asset" key={c.id} style={{ '--k': KIND_COLORS[CARD_DEFS[c.def].kind] } as Record<string, string>}>
-            {CARD_DEFS[c.def].name}
-          </span>
-        ))}
-      </div>
-    </div>
   );
 }
 
@@ -565,7 +702,7 @@ function TeamPhase({ view, act }: ViewProps) {
   const readyCount = state.teams.filter((t) => t.ready).length;
   const incoming = me!.offersIn.length;
   return (
-    <section class="stack">
+    <section class="screen">
       <div class="tabs">
         {(['kaarten', 'team', 'winkel', 'ruilen'] as Tab[]).map((t) => (
           <button key={t} class={`tab ty ${tab === t ? 'on' : ''}`} onClick={() => setTab(t)}>
@@ -576,18 +713,15 @@ function TeamPhase({ view, act }: ViewProps) {
         ))}
       </div>
       <TutorialHint hint={hintFor(view, { tab })} />
-      {me!.sabotageOn.length > 0 && (
-        <div class="frame warn">Iemand heeft iets slechts in de zin met jouw team... Je merkt het straks in de race.</div>
-      )}
-      {tab === 'kaarten' && <HandTab view={view} act={act} />}
-      {tab === 'team' && <BoardTab view={view} />}
-      {tab === 'winkel' && <ShopTab view={view} act={act} />}
-      {tab === 'ruilen' && <TradeTab view={view} act={act} />}
-      <div class="readybar">
-        <button
-          class={`big ty ${team.ready ? '' : 'primary'}`}
-          onClick={() => act(team.ready ? { type: 'unready' } : { type: 'ready' })}
-        >
+      {me!.sabotageOn.length > 0 && <div class="warn-s">⚠ Iemand heeft iets slechts in de zin met jouw team.</div>}
+      <div class="tabbody">
+        {tab === 'kaarten' && <HandTab view={view} act={act} />}
+        {tab === 'team' && <BoardTab view={view} />}
+        {tab === 'winkel' && <ShopTab view={view} act={act} />}
+        {tab === 'ruilen' && <TradeTab view={view} act={act} />}
+      </div>
+      <div class="dock">
+        <button class={`big ty ${team.ready ? '' : 'primary'}`} onClick={() => act(team.ready ? { type: 'unready' } : { type: 'ready' })}>
           {team.ready ? `KLAAR (${readyCount}/${state.teams.length}) · WIJZIG` : `KLAAR VOOR DE RACE (${readyCount}/${state.teams.length})`}
         </button>
       </div>
@@ -601,14 +735,18 @@ function BoardTab({ view }: { view: View }) {
   const riders = state.riders.filter((r) => r.teamId === teamId);
   const perks = perksOf(teamDefIds(team.slots));
   const bidon = view.me!.sabotageOn.includes('bidon');
+  const [rid, setRid] = useState<string | null>(null);
+  const [gear, setGear] = useState(false);
+  const picked = riders.find((r) => r.id === rid);
+  const total = (Object.keys(SLOT_LIMITS) as SlotKind[]).reduce((n, k) => n + SLOT_LIMITS[k], 0);
+  const filled = (Object.keys(SLOT_LIMITS) as SlotKind[]).reduce((n, k) => n + team.slots[k].length, 0);
   return (
     <div class="stack">
       {riders.map((r) => {
-        const maxE = maxEnergyFor(r, perks, bidon);
         const limit = 2 + perks.overtrainTolerance;
         const over = r.fatigue > limit;
         return (
-          <div class="frame rbox" key={r.id}>
+          <button class="frame rbox" key={r.id} onClick={() => setRid(r.id)}>
             <div class="r-top">
               <b>{r.name}</b>
               <span class="dim">{RIDER_TYPES[r.type].label}</span>
@@ -616,37 +754,41 @@ function BoardTab({ view }: { view: View }) {
             <Bars rider={r} tolerance={perks.overtrainTolerance} />
             <div class="r-meta">
               <span>
-                Vermoeidheid <Pips value={r.fatigue} limit={limit} />
+                Vermoeid <Pips value={r.fatigue} limit={limit} />
+                {over && <span class="warn-s"> overtraind</span>}
               </span>
               <span class="dim">Training {r.trained}/{TRAININGS_PER_RIDER}</span>
             </div>
-            {over && <div class="warn-s">Overtraind: alle eigenschappen {r.fatigue - limit} lager. Neem een rustdag!</div>}
-            <div class="dim s">Start met {maxE} energie · {QUIRKS[r.quirk].label}</div>
-          </div>
+          </button>
         );
       })}
-      <div class="frame">
-        <div class="small">Jouw spullen</div>
-        {(Object.keys(SLOT_LIMITS) as SlotKind[]).map((k) => (
-          <div class="slotrow" key={k}>
-            <span class="sk">{SLOT_LABEL[k]}</span>
-            <span class="sv2">
-              {Array.from({ length: SLOT_LIMITS[k] }, (_, i) => {
-                const def = team.slots[k][i];
-                return def ? (
-                  <span class="asset" key={i} style={{ '--k': KIND_COLORS[CARD_DEFS[def].kind] } as Record<string, string>}>
-                    {CARD_DEFS[def].name}
-                  </span>
-                ) : (
-                  <span class="asset empty" key={i}>
-                    leeg
-                  </span>
-                );
-              })}
-            </span>
-          </div>
-        ))}
-      </div>
+      <button class="big" onClick={() => setGear(true)}>
+        Jouw spullen ({filled}/{total})
+      </button>
+      {picked && <RiderSheet rider={picked} state={state} perks={perks} bidon={bidon} onClose={() => setRid(null)} />}
+      {gear && (
+        <Sheet title="Jouw spullen" onClose={() => setGear(false)}>
+          {(Object.keys(SLOT_LIMITS) as SlotKind[]).map((k) => (
+            <div class="slotrow" key={k}>
+              <span class="sk">{SLOT_LABEL[k]}</span>
+              <span class="sv2">
+                {Array.from({ length: SLOT_LIMITS[k] }, (_, i) => {
+                  const def = team.slots[k][i];
+                  return def ? (
+                    <span class="asset" key={i} style={{ '--k': KIND_COLORS[CARD_DEFS[def].kind] } as Record<string, string>}>
+                      {CARD_DEFS[def].name}
+                    </span>
+                  ) : (
+                    <span class="asset empty" key={i}>
+                      leeg
+                    </span>
+                  );
+                })}
+              </span>
+            </div>
+          ))}
+        </Sheet>
+      )}
     </div>
   );
 }
@@ -656,22 +798,29 @@ function HandTab({ view, act }: ViewProps) {
   const team = state.teams.find((t) => t.id === teamId)!;
   const riders = state.riders.filter((r) => r.teamId === teamId);
   const others = state.teams.filter((t) => t.id !== teamId);
-  const [replacing, setReplacing] = useState<string | null>(null);
+  const [replacing, setReplacing] = useState(false);
+  const [sel, setSel] = useState<string | null>(null);
   const hand = me!.hand;
   if (hand.length === 0)
-    return (
-      <div class="frame center dim">
-        Je hebt geen kaarten. Haal er in de winkel of via ruilen een paar.
-      </div>
-    );
+    return <div class="frame center dim">Je hebt geen kaarten. Haal er in de winkel of via ruilen een paar.</div>;
+  const c = hand.find((x) => x.id === sel);
+  const close = () => {
+    setSel(null);
+    setReplacing(false);
+  };
+  const d = c ? CARD_DEFS[c.def] : null;
+  const slot = c ? slotOf(c.def) : null;
+  const full = slot ? team.slots[slot].length >= SLOT_LIMITS[slot] : false;
   return (
-    <div class="list">
-      {hand.map((c) => {
-        const d = CARD_DEFS[c.def];
-        const slot = slotOf(c.def);
-        const full = slot ? team.slots[slot].length >= SLOT_LIMITS[slot] : false;
-        return (
-          <CardRow key={c.id} def={c.def}>
+    <>
+      <div class="tiles">
+        {hand.map((x) => (
+          <CardTile key={x.id} def={x.def} onClick={() => setSel(x.id)} />
+        ))}
+      </div>
+      {c && d && (
+        <Sheet title="Jouw kaart" onClose={close}>
+          <CardRow def={c.def}>
             {d.kind === 'training' && (
               <div class="chips">
                 {riders.map((r) => {
@@ -682,7 +831,10 @@ function HandTab({ view, act }: ViewProps) {
                       key={r.id}
                       class="small-btn"
                       disabled={blocked}
-                      onClick={() => act({ type: 'train', cardId: c.id, riderId: r.id })}
+                      onClick={() => {
+                        act({ type: 'train', cardId: c.id, riderId: r.id });
+                        close();
+                      }}
                     >
                       {firstName(r.name)}
                     </button>
@@ -691,16 +843,22 @@ function HandTab({ view, act }: ViewProps) {
               </div>
             )}
             {slot && !full && (
-              <button class="small-btn primary" onClick={() => act({ type: 'install', cardId: c.id })}>
+              <button
+                class="small-btn primary"
+                onClick={() => {
+                  act({ type: 'install', cardId: c.id });
+                  close();
+                }}
+              >
                 Op je bord leggen
               </button>
             )}
-            {slot && full && replacing !== c.id && (
-              <button class="small-btn" onClick={() => setReplacing(c.id)}>
+            {slot && full && !replacing && (
+              <button class="small-btn" onClick={() => setReplacing(true)}>
                 Vak vol: vervangen...
               </button>
             )}
-            {slot && full && replacing === c.id && (
+            {slot && full && replacing && (
               <div class="chips">
                 {team.slots[slot].map((def, i) => (
                   <button
@@ -708,7 +866,7 @@ function HandTab({ view, act }: ViewProps) {
                     class="small-btn"
                     onClick={() => {
                       act({ type: 'install', cardId: c.id, replaceDef: def });
-                      setReplacing(null);
+                      close();
                     }}
                   >
                     Vervang {CARD_DEFS[def].name}
@@ -722,7 +880,10 @@ function HandTab({ view, act }: ViewProps) {
                   <button
                     key={t.id}
                     class="small-btn"
-                    onClick={() => act({ type: 'sabotage', cardId: c.id, targetTeamId: t.id })}
+                    onClick={() => {
+                      act({ type: 'sabotage', cardId: c.id, targetTeamId: t.id });
+                      close();
+                    }}
                   >
                     Tegen {t.name}
                   </button>
@@ -730,41 +891,46 @@ function HandTab({ view, act }: ViewProps) {
               </div>
             )}
           </CardRow>
-        );
-      })}
-    </div>
+        </Sheet>
+      )}
+    </>
   );
 }
 
 function ShopTab({ view, act }: ViewProps) {
   const { state, teamId } = view;
   const team = state.teams.find((t) => t.id === teamId)!;
+  const [pick, setPick] = useState<number | null>(null);
+  const def = pick !== null ? state.market[pick] : undefined;
   return (
     <div class="stack">
-      <div class="frame">
-        <div class="small">Je hebt € {team.coins}</div>
-        <p class="dim s">Een kaart uit de markt kost de prijs op de kaart. Een onbekende van de stapel kost € {BLIND_COST}.</p>
-        <button
-          class="big mt"
-          disabled={team.coins < BLIND_COST}
-          onClick={() => act({ type: 'buy', source: { kind: 'deck' } })}
-        >
+      <div class="shop-top">
+        <span class="small">Je hebt € {team.coins}</span>
+        <button class="small-btn" disabled={team.coins < BLIND_COST} onClick={() => act({ type: 'buy', source: { kind: 'deck' } })}>
           Blind trekken (€ {BLIND_COST})
         </button>
       </div>
       <div class="list">
-        {state.market.map((def, i) => (
-          <CardRow key={i} def={def} price>
+        {state.market.map((m, i) => (
+          <CardTile key={i} def={m} price dim={team.coins < CARD_DEFS[m].price} onClick={() => setPick(i)} />
+        ))}
+      </div>
+      {def && (
+        <Sheet title="Winkel" onClose={() => setPick(null)}>
+          <CardRow def={def} price>
             <button
               class="small-btn primary"
               disabled={team.coins < CARD_DEFS[def].price}
-              onClick={() => act({ type: 'buy', source: { kind: 'market', index: i } })}
+              onClick={() => {
+                act({ type: 'buy', source: { kind: 'market', index: pick! } });
+                setPick(null);
+              }}
             >
               Koop voor € {CARD_DEFS[def].price}
             </button>
           </CardRow>
-        ))}
-      </div>
+        </Sheet>
+      )}
     </div>
   );
 }
@@ -790,7 +956,7 @@ function OfferBox({
   const can = !mine && [...need].every(([d, n]) => (owned.get(d) ?? 0) >= n);
   const names = (list: string[]) => (list.length ? list.map((d) => CARD_DEFS[d].name).join(', ') : 'niets');
   return (
-    <div class="frame offer">
+    <div class="stack tight">
       <div class="small">{mine ? `Jouw voorstel aan ${other.name}` : `Voorstel van ${other.name}`}</div>
       <p>
         {mine ? 'Jij geeft' : 'Zij geven'}: <b>{names(o.giveCards.map((c) => c.def))}</b>
@@ -806,11 +972,7 @@ function OfferBox({
         </button>
       ) : (
         <div class="row2">
-          <button
-            class="small-btn primary"
-            disabled={!can}
-            onClick={() => act({ type: 'respond', offerId: o.id, accept: true })}
-          >
+          <button class="small-btn primary" disabled={!can} onClick={() => act({ type: 'respond', offerId: o.id, accept: true })}>
             {can ? 'Accepteren' : 'Kan niet'}
           </button>
           <button class="small-btn" onClick={() => act({ type: 'respond', offerId: o.id, accept: false })}>
@@ -822,79 +984,141 @@ function OfferBox({
   );
 }
 
+type TradeSheet = { k: 'in'; id: string } | { k: 'out' } | { k: 'make' };
+
 function TradeTab({ view, act }: ViewProps) {
   const { state, me, teamId } = view;
   const team = state.teams.find((t) => t.id === teamId)!;
   const others = state.teams.filter((t) => t.id !== teamId);
+  const [sheet, setSheet] = useState<TradeSheet | null>(null);
   const [to, setTo] = useState<string | null>(others[0]?.id ?? null);
   const [give, setGive] = useState<string[]>([]);
   const [giveCoins, setGiveCoins] = useState(0);
   const [want, setWant] = useState<string[]>([]);
   const [wantCoins, setWantCoins] = useState(0);
   const hand = me!.hand;
+  const offersIn = me!.offersIn;
+  const out = me!.offerOut;
+  const close = () => setSheet(null);
+
+  // Een voorstel dat binnenkomt terwijl er niets open staat, springt in beeld.
+  const prevIn = useRef(offersIn.length);
+  useEffect(() => {
+    if (offersIn.length > prevIn.current) setSheet((s) => s ?? { k: 'in', id: offersIn[offersIn.length - 1].id });
+    prevIn.current = offersIn.length;
+  }, [offersIn.length]);
+
   const toggle = (id: string) => setGive((g) => (g.includes(id) ? g.filter((x) => x !== id) : g.length < 3 ? [...g, id] : g));
   const canSend = !!to && give.length + want.length + giveCoins + wantCoins > 0;
+  const names = (list: string[]) => (list.length ? list.map((d) => CARD_DEFS[d].name).join(', ') : 'niets');
+  const inSel = sheet?.k === 'in' ? offersIn.find((o) => o.id === sheet.id) : undefined;
+  const nameOf = (id: string) => state.teams.find((t) => t.id === id)?.name ?? '?';
+
   return (
     <div class="stack">
-      {me!.offersIn.map((o) => (
-        <OfferBox key={o.id} o={o} state={state} mine={false} hand={hand} act={act} />
-      ))}
-      {me!.offerOut && <OfferBox o={me!.offerOut} state={state} mine hand={hand} act={act} />}
-      <div class="frame make">
-        <div class="small">Maak een voorstel</div>
-        <div class="chips">
-          {others.map((t) => (
-            <button
-              key={t.id}
-              class={`pill ${to === t.id ? 'on' : ''}`}
-              style={{ '--c': TEAM_COLORS[t.color % TEAM_COLORS.length].hex } as Record<string, string>}
-              onClick={() => setTo(t.id)}
-            >
-              {t.name}
-            </button>
-          ))}
-        </div>
-        <div class="dim s">Jij geeft: tik kaarten aan ({give.length}/3)</div>
-        <div class="chips">
-          {hand.length === 0 && <span class="dim">Je hebt geen kaarten</span>}
-          {hand.map((c) => (
-            <button key={c.id} class={`pill small ${give.includes(c.id) ? 'on' : ''}`} onClick={() => toggle(c.id)}>
-              {CARD_DEFS[c.def].name}
-            </button>
-          ))}
-        </div>
-        <Stepper label="Munten erbij" value={giveCoins} max={team.coins} onChange={setGiveCoins} />
-        <div class="dim s">Jij vraagt: kies kaarten ({want.length}/3)</div>
-        <div class="chips">
-          {CARD_DEF_LIST.map((d) => (
-            <button key={d.id} class="pill small" onClick={() => setWant((w) => (w.length < 3 ? [...w, d.id] : w))}>
-              {d.name}
-            </button>
-          ))}
-        </div>
-        <div class="chips">
-          {want.length === 0 && <span class="dim">nog niets gekozen</span>}
-          {want.map((d, i) => (
-            <button key={i} class="pill small on" onClick={() => setWant(want.filter((_, j) => j !== i))}>
-              {CARD_DEFS[d].name} ✕
-            </button>
-          ))}
-        </div>
-        <Stepper label="Munten vragen" value={wantCoins} max={20} onChange={setWantCoins} />
-        <button
-          class="big primary ty"
-          disabled={!canSend}
-          onClick={() => {
-            act({ type: 'offer', to: to!, give, giveCoins, want, wantCoins });
-            setGive([]);
-            setWant([]);
-            setGiveCoins(0);
-            setWantCoins(0);
-          }}
-        >
-          VOORSTEL STUREN
+      {offersIn.map((o) => (
+        <button class="offer-row frame hot" key={o.id} onClick={() => setSheet({ k: 'in', id: o.id })}>
+          <span class="small">Voorstel van {nameOf(o.from)}</span>
+          <span class="or-text">
+            Zij geven {names(o.giveCards.map((c) => c.def))}
+            {o.giveCoins > 0 ? ` + € ${o.giveCoins}` : ''}
+          </span>
         </button>
-      </div>
+      ))}
+      {out && (
+        <button class="offer-row frame" onClick={() => setSheet({ k: 'out' })}>
+          <span class="small">Jouw voorstel aan {nameOf(out.to)}</span>
+          <span class="or-text">Wacht op antwoord</span>
+        </button>
+      )}
+      {offersIn.length === 0 && !out && <div class="frame center dim">Nog geen voorstellen. Ruil kaarten of munten met een ander team.</div>}
+      <button class="big primary ty" disabled={others.length === 0} onClick={() => setSheet({ k: 'make' })}>
+        {out ? 'NIEUW VOORSTEL' : 'VOORSTEL MAKEN'}
+      </button>
+
+      {inSel && (
+        <Sheet title="Voorstel" onClose={close}>
+          <OfferBox o={inSel} state={state} mine={false} hand={hand} act={(a) => { act(a); close(); }} />
+        </Sheet>
+      )}
+      {sheet?.k === 'out' && out && (
+        <Sheet title="Jouw voorstel" onClose={close}>
+          <OfferBox o={out} state={state} mine hand={hand} act={(a) => { act(a); close(); }} />
+        </Sheet>
+      )}
+      {sheet?.k === 'make' && (
+        <Sheet title="Maak een voorstel" onClose={close}>
+          <div class="stack">
+            <div class="chips">
+              {others.map((t) => (
+                <button
+                  key={t.id}
+                  class={`pill ${to === t.id ? 'on' : ''}`}
+                  style={{ '--c': TEAM_COLORS[t.color % TEAM_COLORS.length].hex } as Record<string, string>}
+                  onClick={() => setTo(t.id)}
+                >
+                  {t.name}
+                </button>
+              ))}
+            </div>
+            <div>
+              <div class="small sec">Jij geeft ({give.length}/3)</div>
+              <div class="chips">
+                {hand.length === 0 && <span class="dim">Je hebt geen kaarten</span>}
+                {hand.map((c) => (
+                  <button key={c.id} class={`pill small ${give.includes(c.id) ? 'on' : ''}`} onClick={() => toggle(c.id)}>
+                    {CARD_DEFS[c.def].name}
+                  </button>
+                ))}
+              </div>
+              <Stepper label="Munten erbij" value={giveCoins} max={team.coins} onChange={setGiveCoins} />
+            </div>
+            <div>
+              <div class="small sec">Jij vraagt ({want.length}/3)</div>
+              <select
+                class="pick"
+                value=""
+                disabled={want.length >= 3}
+                onChange={(e) => {
+                  const v = (e.target as HTMLSelectElement).value;
+                  if (v) setWant((w) => (w.length < 3 ? [...w, v] : w));
+                  (e.target as HTMLSelectElement).value = '';
+                }}
+              >
+                <option value="">+ Kaart kiezen...</option>
+                {CARD_DEF_LIST.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+              <div class="chips mt">
+                {want.length === 0 && <span class="dim">nog niets gekozen</span>}
+                {want.map((d, i) => (
+                  <button key={i} class="pill small on" onClick={() => setWant(want.filter((_, j) => j !== i))}>
+                    {CARD_DEFS[d].name} ✕
+                  </button>
+                ))}
+              </div>
+              <Stepper label="Munten vragen" value={wantCoins} max={20} onChange={setWantCoins} />
+            </div>
+            <button
+              class="big primary ty"
+              disabled={!canSend}
+              onClick={() => {
+                act({ type: 'offer', to: to!, give, giveCoins, want, wantCoins });
+                setGive([]);
+                setWant([]);
+                setGiveCoins(0);
+                setWantCoins(0);
+                close();
+              }}
+            >
+              VOORSTEL STUREN
+            </button>
+          </div>
+        </Sheet>
+      )}
     </div>
   );
 }
@@ -922,21 +1146,22 @@ function Race({ view, act }: ViewProps) {
   const riders = state.riders.filter((r) => r.teamId === teamId);
   const perks = perksOf(teamDefIds(team.slots));
   const [choice, setChoice] = useState<Record<string, Effort>>({});
+  const [sheet, setSheet] = useState<'event' | string | null>(null);
   useEffect(() => setChoice({}), [state.round]);
   const locked = team.locked;
   const shown = locked ? me!.efforts : choice;
   const ev = state.event ? EVENTS[state.event.id] : null;
-  const eventRider = state.event?.targetRiderId;
+  const picked = riders.find((r) => r.id === sheet);
 
   return (
-    <section class="stack">
+    <section class="screen">
       <TutorialHint hint={hintFor(view, { locked })} />
       {ev && (
-        <div class={`event frame ${ev.silly ? 'silly' : ''}`}>
-          <b>{ev.title}.</b> {ev.blurb}
+        <div class="strip">
+          <StripBtn label="Gebeurtenis" value={ev.title} tone={ev.silly ? 'silly' : ''} onClick={() => setSheet('event')} />
         </div>
       )}
-      <div class="riders">
+      <div class="riders grow">
         {riders.map((r) => {
           const terrain = terrainAt(state, r.pos);
           const empty = r.energy <= 0;
@@ -945,27 +1170,23 @@ function Race({ view, act }: ViewProps) {
           return (
             <div class="frame rider" key={r.id}>
               <div class="r-top">
-                <b>{r.name}</b>
-                <span class="dim">
+                <b class="r-name">{r.name}</b>
+                <span class="dim r-sub">
                   {RIDER_TYPES[r.type].label} · {ordinal(1 + state.riders.filter((x) => x.pos > r.pos).length)}
                 </span>
+                <button class="info" aria-label={`Over ${r.name}`} onClick={() => setSheet(r.id)}>
+                  i
+                </button>
               </div>
-              <div class="r-mid">
+              <div class="energy">
                 <span class={`terr t-${terrain}`}>
                   {TERRAINS[terrain].icon} {TERRAINS[terrain].label}
                 </span>
-                <span class="dim">
-                  {state.trackLength - Math.floor(r.pos)} tegels te gaan
-                  {eventRider === r.id ? ' · doelwit' : ''}
-                </span>
-              </div>
-              <div class="energy">
-                <span class="el">Energie {r.energy}/{r.maxEnergy}</span>
                 <span class="ebar">
                   <span class={`fill ${pct <= 25 ? 'low' : pct <= 55 ? 'mid' : 'high'}`} style={{ width: `${pct}%` }} />
                 </span>
+                <span class={`el ${empty ? 'warn-s' : ''}`}>{empty ? 'Op de fles' : `${r.energy}/${r.maxEnergy}`}</span>
               </div>
-              {empty && <div class="warn-s">Op de fles: je kunt alleen Rustig rijden.</div>}
               <div class="efforts">
                 {(Object.keys(EFFORTS) as Effort[]).map((e) => {
                   const real = resolveEffort(r.energy, perks, e);
@@ -990,27 +1211,43 @@ function Race({ view, act }: ViewProps) {
           );
         })}
       </div>
-      {locked ? (
-        <div class="stack">
-          <p class="ok center ty">TEMPO VASTGELEGD</p>
-          <button class="big ty" onClick={() => act({ type: 'unlock' })}>
-            WIJZIG
+      <div class="dock">
+        {locked ? (
+          <>
+            <p class="ok center ty">TEMPO VASTGELEGD</p>
+            <button class="big ty" onClick={() => act({ type: 'unlock' })}>
+              WIJZIG
+            </button>
+          </>
+        ) : (
+          <button
+            class="big primary ty"
+            onClick={() =>
+              act({
+                type: 'effort',
+                efforts: Object.fromEntries(riders.map((r) => [r.id, choice[r.id] ?? (r.energy <= 0 ? 'rustig' : 'normaal')])),
+              })
+            }
+          >
+            BEVESTIGEN
           </button>
-        </div>
-      ) : (
-        <button
-          class="big primary ty"
-          onClick={() =>
-            act({
-              type: 'effort',
-              efforts: Object.fromEntries(riders.map((r) => [r.id, choice[r.id] ?? (r.energy <= 0 ? 'rustig' : 'normaal')])),
-            })
-          }
-        >
-          BEVESTIGEN
-        </button>
+        )}
+      </div>
+      {sheet === 'event' && ev && (
+        <Sheet title={ev.title} onClose={() => setSheet(null)}>
+          <p>{ev.blurb}</p>
+        </Sheet>
       )}
-      <p class="dim s center">De tegels zijn een schatting: drafting, wind en geluk komen er nog bij.</p>
+      {picked && (
+        <RiderSheet
+          rider={picked}
+          state={state}
+          race
+          perks={perks}
+          bidon={me!.sabotageOn.includes('bidon')}
+          onClose={() => setSheet(null)}
+        />
+      )}
     </section>
   );
 }
@@ -1020,41 +1257,43 @@ function Resolve({ view }: { view: View }) {
   const rep = state.report;
   const mine = state.riders.filter((r) => r.teamId === teamId);
   return (
-    <section class="stack">
+    <section class="screen">
       <TutorialHint hint={hintFor(view, {})} />
-      <p class="center ty">KIJK NAAR DE TV</p>
-      {rep &&
-        mine.map((r) => {
-          const m = rep.moves.find((x) => x.riderId === r.id);
-          if (!m) return null;
-          const p = m.parts;
-          const fmt = (n: number) => `${n > 0 ? '+' : ''}${n}`;
-          const bits = [
-            EFFORTS[m.effort].label,
-            p.stat ? `kracht ${fmt(p.stat)}` : '',
-            p.terrain ? `uitrusting/terrein ${fmt(p.terrain)}` : '',
-            p.quirk ? `eigenaardigheid ${fmt(p.quirk)}` : '',
-            p.event ? `omstandigheden ${fmt(p.event)}` : '',
-            p.draft ? 'drafting +1' : '',
-            p.chase ? `peloton trekt terug +${p.chase}` : '',
-            m.windPaid ? 'kopwerk: -1 energie' : '',
-            m.pech ? `pech ${fmt(p.luck)}` : '',
-            m.shielded ? 'reservefiets redt je' : '',
-            m.boost ? 'meewind +1' : '',
-            m.exhausted ? 'op de fles' : '',
-            m.service ? 'volgauto: +3 energie' : '',
-          ].filter(Boolean);
-          return (
-            <div class="frame result" key={r.id}>
-              <div class="r-top">
-                <b>{r.name}</b>
-                <span class="ty acc">+{m.to - m.from}</span>
+      <p class="center ty look">KIJK NAAR DE TV</p>
+      <div class="stack grow">
+        {rep &&
+          mine.map((r) => {
+            const m = rep.moves.find((x) => x.riderId === r.id);
+            if (!m) return null;
+            const p = m.parts;
+            const fmt = (n: number) => `${n > 0 ? '+' : ''}${n}`;
+            const bits = [
+              EFFORTS[m.effort].label,
+              p.stat ? `kracht ${fmt(p.stat)}` : '',
+              p.terrain ? `uitrusting/terrein ${fmt(p.terrain)}` : '',
+              p.quirk ? `eigenaardigheid ${fmt(p.quirk)}` : '',
+              p.event ? `omstandigheden ${fmt(p.event)}` : '',
+              p.draft ? 'drafting +1' : '',
+              p.chase ? `peloton trekt terug +${p.chase}` : '',
+              m.windPaid ? 'kopwerk: -1 energie' : '',
+              m.pech ? `pech ${fmt(p.luck)}` : '',
+              m.shielded ? 'reservefiets redt je' : '',
+              m.boost ? 'meewind +1' : '',
+              m.exhausted ? 'op de fles' : '',
+              m.service ? 'volgauto: +3 energie' : '',
+            ].filter(Boolean);
+            return (
+              <div class="frame result" key={r.id}>
+                <div class="r-top">
+                  <b>{r.name}</b>
+                  <span class="ty acc">+{m.to - m.from}</span>
+                </div>
+                <div class="dim s">{bits.join(' · ')}</div>
+                <div class="dim s">Energie nu: {m.energyAfter}</div>
               </div>
-              <div class="dim s">{bits.join(' · ')}</div>
-              <div class="dim s">Energie nu: {m.energyAfter}</div>
-            </div>
-          );
-        })}
+            );
+          })}
+      </div>
     </section>
   );
 }
@@ -1063,51 +1302,66 @@ function Resolve({ view }: { view: View }) {
 
 function Results({ view, president }: { view: View; president: (w: PresidentAction) => void }) {
   const { state, teamId } = view;
+  const [sheet, setSheet] = useState<'reward' | 'sab' | null>(null);
   const res = state.stageResult!;
   const mine = res.teams.find((t) => t.teamId === teamId)!;
   const isPresident = view.presidentTeamId === teamId;
   const place = [...res.teams].sort((a, b) => b.stagePoints - a.stagePoints).findIndex((t) => t.teamId === teamId) + 1;
   const sab = res.sabotages.filter((x) => x.toTeamId === teamId || x.fromTeamId === teamId);
+  const coins = mine.prizeCoins + mine.sponsorCoins;
   return (
-    <section class="stack">
+    <section class="screen">
       <TutorialHint hint={hintFor(view, {})} />
-      <div class="frame center big-result">
+      <div class="frame center big-result grow">
         <div class="small">Etappe {res.stage}</div>
         <div class="place">{ordinal(place)}</div>
         <div>
           <b>+{mine.stagePoints}</b> punten · <b>{mine.totalPoints}</b> totaal
         </div>
       </div>
-      <div class="frame">
-        <div class="small">Beloning</div>
-        <p>
-          +{mine.prizeCoins} munten voor de uitslag{mine.sponsorCoins > 0 ? `, +${mine.sponsorCoins} van sponsors` : ''}.
-        </p>
-        {mine.bonusCards.length > 0 && (
-          <div class="chips mt">
-            {mine.bonusCards.map((d, i) => (
-              <span class="asset" key={i} style={{ '--k': KIND_COLORS[CARD_DEFS[d].kind] } as Record<string, string>}>
-                Bonus: {CARD_DEFS[d].name}
-              </span>
-            ))}
-          </div>
+      <div class="strip">
+        <StripBtn label="Beloning" value={`+€ ${coins}${mine.bonusCards.length ? ` · ${mine.bonusCards.length} kaart` : ''}`} onClick={() => setSheet('reward')} />
+        {sab.length > 0 && <StripBtn label="Sabotage" value={`${sab.length} incident${sab.length === 1 ? '' : 'en'}`} tone="silly" onClick={() => setSheet('sab')} />}
+      </div>
+      <div class="dock">
+        {isPresident ? (
+          <button class="big primary ty" onClick={() => president('nextStage')}>
+            {state.stage >= STAGES ? 'NAAR DE EINDSTAND' : 'VOLGENDE ETAPPE'}
+          </button>
+        ) : (
+          <p class="dim center">De volgende etappe begint vanzelf.</p>
         )}
       </div>
-      {sab.map((x, i) => (
-        <div class="frame warn" key={i}>
-          {state.teams.find((t) => t.id === x.fromTeamId)!.name} zette {CARD_DEFS[x.def].name} in tegen{' '}
-          {state.teams.find((t) => t.id === x.toTeamId)!.name}.
-        </div>
-      ))}
-      <p class="dim s center">
-        Training vervaagt nu met 1. Vermoeidheid zakt langzaam. Plan je volgende voorbereiding slim.
-      </p>
-      {isPresident ? (
-        <button class="big primary ty" onClick={() => president('nextStage')}>
-          {state.stage >= STAGES ? 'NAAR DE EINDSTAND' : 'VOLGENDE ETAPPE'}
-        </button>
-      ) : (
-        <p class="dim center">De volgende etappe begint vanzelf.</p>
+      {sheet === 'reward' && (
+        <Sheet title="Beloning" onClose={() => setSheet(null)}>
+          <div class="stack tight">
+            <p>
+              +{mine.prizeCoins} munten voor de uitslag{mine.sponsorCoins > 0 ? `, +${mine.sponsorCoins} van sponsors` : ''}.
+            </p>
+            {mine.bonusCards.length > 0 && (
+              <div class="chips">
+                {mine.bonusCards.map((d, i) => (
+                  <span class="asset" key={i} style={{ '--k': KIND_COLORS[CARD_DEFS[d].kind] } as Record<string, string>}>
+                    Bonus: {CARD_DEFS[d].name}
+                  </span>
+                ))}
+              </div>
+            )}
+            <p class="dim s">Training vervaagt nu met 1. Vermoeidheid zakt langzaam. Plan je volgende voorbereiding slim.</p>
+          </div>
+        </Sheet>
+      )}
+      {sheet === 'sab' && (
+        <Sheet title="Sabotage" onClose={() => setSheet(null)}>
+          <div class="stack tight">
+            {sab.map((x, i) => (
+              <p key={i}>
+                {state.teams.find((t) => t.id === x.fromTeamId)!.name} zette {CARD_DEFS[x.def].name} in tegen{' '}
+                {state.teams.find((t) => t.id === x.toTeamId)!.name}.
+              </p>
+            ))}
+          </div>
+        </Sheet>
       )}
     </section>
   );
@@ -1115,33 +1369,47 @@ function Results({ view, president }: { view: View; president: (w: PresidentActi
 
 function Finished({ view, president }: { view: View; president: (w: PresidentAction) => void }) {
   const { state, teamId } = view;
+  const [sheet, setSheet] = useState(false);
   const res = state.season!;
   const isPresident = view.presidentTeamId === teamId;
   const place = res.teams.findIndex((t) => t.teamId === teamId) + 1;
   const mine = res.teams.find((t) => t.teamId === teamId)!;
   const awards = res.awards.filter((a) => a.teamId === teamId);
   return (
-    <section class="stack">
+    <section class="screen">
       <TutorialHint hint={hintFor(view, {})} />
-      <div class="frame center big-result">
+      <div class="frame center big-result grow">
         <div class="small">Seizoen afgerond</div>
         <div class="place">{ordinal(place)}</div>
         <div>
           <b>{mine.points}</b> punten · € {mine.coins} over
         </div>
       </div>
-      {awards.map((a) => (
-        <div class="frame" key={a.title}>
-          <div class="small">{a.title}</div>
-          <div class="dim">{a.blurb}</div>
+      {awards.length > 0 && (
+        <div class="strip">
+          <StripBtn label="Prijzen" value={awards.map((a) => a.title).join(' · ')} onClick={() => setSheet(true)} />
         </div>
-      ))}
-      {isPresident ? (
-        <button class="big primary ty" onClick={() => president('rematch')}>
-          NIEUW SEIZOEN
-        </button>
-      ) : (
-        <p class="dim center">De president kan een nieuw seizoen starten.</p>
+      )}
+      <div class="dock">
+        {isPresident ? (
+          <button class="big primary ty" onClick={() => president('rematch')}>
+            NIEUW SEIZOEN
+          </button>
+        ) : (
+          <p class="dim center">De president kan een nieuw seizoen starten.</p>
+        )}
+      </div>
+      {sheet && (
+        <Sheet title="Jouw prijzen" onClose={() => setSheet(false)}>
+          <div class="stack">
+            {awards.map((a) => (
+              <div class="stack tight" key={a.title}>
+                <div class="small">{a.title}</div>
+                <p class="dim">{a.blurb}</p>
+              </div>
+            ))}
+          </div>
+        </Sheet>
       )}
     </section>
   );

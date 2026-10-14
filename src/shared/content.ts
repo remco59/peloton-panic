@@ -226,8 +226,8 @@ export const RIDER_NAME_POOL = [
 ];
 
 export const COMMENTATORS = {
-  johan: { name: 'Johan', role: 'Verslaggever', voice: 'nl-NL-MaartenNeural', rate: '+6%', pitch: '+0Hz' },
-  marieke: { name: 'Marieke', role: 'Analist', voice: 'nl-NL-ColetteNeural', rate: '+4%', pitch: '+0Hz' },
+  johan: { name: 'Johan', role: 'Verslaggever', voice: 'nl-BE-ArnaudNeural', rate: '+15%', pitch: '+4Hz', volume: '+10%' },
+  marieke: { name: 'Marieke', role: 'Analist', voice: 'nl-BE-DenaNeural', rate: '+15%', pitch: '+4Hz', volume: '+10%' },
 } as const;
 
 export type CommentatorId = keyof typeof COMMENTATORS;

@@ -73,7 +73,8 @@ gegenereerd en gecachet in `.cache/tts`. Zonder edge-tts valt het terug op spraa
 daarna op ondertitels. Klik één keer op de tv om geluid toe te staan.
 
 Edge TTS is een onofficiële client van een Microsoft-dienst: prima voor een spelletje thuis, maar
-niets om een product op te bouwen. Stemmen staan in `src/shared/content.ts`.
+niets om een product op te bouwen. Stemmen (Arnaud en Dena, Vlaams-Nederlands, snel en iets
+hoger voor meer energie) staan in `src/shared/content.ts`.
 
 ## Projectindeling
 
