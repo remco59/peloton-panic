@@ -196,48 +196,61 @@ export function finishLines(s: PublicState): Line[] {
 
 export type TutorialTopic =
   | 'intro'
+  | 'season'
   | 'draft'
   | 'team'
+  | 'train'
+  | 'trade'
   | 'race'
   | 'resolve'
   | 'exhausted'
   | 'results'
-  | 'fade'
-  | 'season';
+  | 'fade';
 
-/** Uitleg die alleen verschijnt als de tutorial aan staat. Elk onderwerp komt één keer. */
-export function tutorialLines(topic: TutorialTopic, s: PublicState): Line[] {
+/** Uitleg die alleen verschijnt als de tutorial aan staat. Elk onderwerp komt één keer, in korte blokken. */
+export function tutorialLines(topic: TutorialTopic, _s: PublicState): Line[] {
   switch (topic) {
     case 'intro':
       return [
         j('Even hoe dit werkt. Jullie managen elk een ploeg van drie renners en spelen een seizoen van drie etappes.'),
-        m('Elke etappe heeft drie delen: eerst de voorbereiding, dan de race, en daarna de uitslag met beloningen.'),
-        j('Jullie telefoon is jullie teambord. Op de tv zien jullie de gezamenlijke markt en de race.'),
+        m('Elke etappe heeft vier delen: een draft, de voorbereiding, de race en de uitslag met beloningen.'),
+        j('Jullie telefoon is jullie teambord. Op de tv zien jullie de markt en de race. Op de telefoon staat steeds uitleg bij wat je nu kunt doen.'),
+      ];
+    case 'season':
+      return [
+        m('Na drie etappes tellen we de punten op. De laatste etappe telt dubbel, dus niemand is kansloos.'),
       ];
     case 'draft':
       return [
-        j('We beginnen met de draft. Op de tv ligt een markt met vijf kaarten. Om de beurt pak je er een.'),
-        m('Je pakt een kaart uit de markt, of een onbekende van de stapel. Het team onderaan het klassement mag als eerste.'),
-        j('Er zijn trainingskaarten, sponsors, staf, materiaal en wagens. En sabotage, voor wie durft.'),
+        j('We beginnen met de draft. Op de tv ligt een markt van vijf kaarten. Om de beurt pak je er een, of je trekt een onbekende van de stapel.'),
+        m('Het team onderaan het klassement begint. Iedereen krijgt twee keuzes. Sponsors geven munten, staf en materiaal helpen in de race, en training maakt renners sterker.'),
       ];
     case 'team':
       return [
-        j('Nu de voorbereiding. Gebruik je kaarten op je telefoon. Een trainingskaart geef je aan een renner, die wordt dan sterker.'),
-        m('Maar let op: training kost vermoeidheid. Te veel trainen betekent overtraining, en dan word je juist zwakker.'),
-        j('Spullen zoals een sponsor, staf of reservefiets leg je op je bord. Die werken de hele etappe.'),
-        m('Met munten koop je extra kaarten in de winkel, en je kunt kaarten ruilen met andere teams. Druk op Klaar als je er zin in hebt.'),
+        j('Nu de voorbereiding. Alles gebeurt op je telefoon. Onderaan zie je de knoppen Kaarten, Team, Winkel en Ruilen.'),
+        m('Bij Kaarten gebruik je wat je hebt. Bij Team zie je je renners en je spullen. In de Winkel koop je extra kaarten met munten.'),
+        j('Als je klaar bent, druk je op Klaar. De race begint zodra iedereen klaar is, of als de tijd om is.'),
+      ];
+    case 'train':
+      return [
+        m('Een tip over training. Een trainingskaart geef je aan een renner. Die wordt sterker, maar ook vermoeider.'),
+        j('Te vermoeid betekent overtraind, en dan word je juist zwakker. Een rustdag of fysiotherapeut helpt. En training vervaagt na elke etappe met één punt.'),
+      ];
+    case 'trade':
+      return [
+        m('Je mag ook ruilen. Kies een team, zeg wat je geeft en wat je vraagt, munten mogen ook. Praat er gewoon over aan tafel.'),
       ];
     case 'race':
       return [
         j('De race begint. Elke ronde kies je per renner een tempo: Rustig, Normaal of Alles geven.'),
-        m('Alles geven is het snelst, maar het kost drie energie en kan alleen met genoeg energie. Rustig herstelt juist wat. Heb je geen energie meer, dan ben je op de fles.'),
-        j('Je energie en je training bepalen hoe ver je rijdt. Hoe beter je voorbereid bent, hoe meer je eruit haalt.'),
+        m('Normaal kost één energie. Alles geven is het snelst, maar kost drie energie en kan alleen met genoeg energie. Rustig herstelt juist wat.'),
+        j('Heb je geen energie meer, dan ben je op de fles en kun je alleen nog rustig rijden. Verdeel je energie dus over de hele etappe.'),
       ];
     case 'resolve':
       return [
-        m('Kijk naar het peloton. Wie vlak achter een andere renner rijdt, drafting: gratis een extra tegel.'),
-        j('De renner aan kop betaalt de wind: een extra energie. Voorop rijden is dapper, maar het kost wat.'),
-        m('En er kan pech zijn. Een lekke band, een val. Een reservefiets of mecanicien vangt dat op.'),
+        m('Kijk naar het peloton. Wie vlak achter een andere renner rijdt, drafting: gratis één extra tegel.'),
+        j('De renner aan kop betaalt de wind, een extra energie. Voorop rijden is dapper, maar het kost wat.'),
+        m('En er kan pech zijn: een lekke band of een val. Een reservefiets of mecanicien vangt dat op.'),
       ];
     case 'exhausted':
       return [
@@ -247,17 +260,12 @@ export function tutorialLines(topic: TutorialTopic, s: PublicState): Line[] {
     case 'results':
       return [
         j('De uitslag. De top zes renners scoort punten, en elk team krijgt munten voor de einduitslag en voor sponsors.'),
-        m('Het podium krijgt bonuskaarten. De rode lantaarn krijgt een troostkaart en twee munten, zodat je kunt terugkomen.'),
-        j('Let op: je training vervaagt na elke etappe met één punt. Wat je nu opbouwt, is straks deels weg.'),
+        m('De winnaar van de etappe krijgt een bonuskaart. Het team onderaan het klassement krijgt extra hulp: twee kaarten en twee munten, zodat je kunt terugkomen.'),
       ];
     case 'fade':
       return [
-        m('Je renners zijn ouder en moe. Training vervaagt, en vermoeidheid zakt maar langzaam. Plan je rustdagen.'),
-        j('Wie het hele seizoen slim bouwt, is op het einde de sterkste. Succes met etappe twee.'),
-      ];
-    case 'season':
-      return [
-        j('Na drie etappes tellen we de punten op. De laatste etappe telt dubbel, dus niemand is kansloos. De laatste krijgt de rode lantaarn.'),
+        m('Let op: training vervaagt na elke etappe met één punt, en vermoeidheid zakt maar langzaam. Plan je rustdagen.'),
+        j('Wie het hele seizoen slim bouwt, is op het einde de sterkste. Succes met de volgende etappe.'),
       ];
   }
 }

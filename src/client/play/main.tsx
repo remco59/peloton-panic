@@ -28,6 +28,8 @@ import {
   terrainAt,
 } from '../../shared/engine';
 import type { PlayerAction, PresidentAction, RoomInfo, ServerMsg } from '../../shared/protocol';
+import { phoneHint } from '../../shared/tutorial';
+import type { Hint, HintContext } from '../../shared/tutorial';
 import { BLIND_COST, SLOT_LIMITS, STAGES, TRAININGS_PER_RIDER } from '../../shared/types';
 import type { Card, Effort, OfferView, PlayerView, PublicState, Rider, SlotKind, Stat } from '../../shared/types';
 import { openSocket } from '../common/ws';
@@ -87,6 +89,74 @@ const slotOf = (def: string): SlotKind | null => {
 const SLOT_LABEL: Record<SlotKind, string> = { sponsor: 'Sponsors', staff: 'Staf', material: 'Materiaal', car: 'Wagen' };
 
 // ---- Kleine onderdelen -------------------------------------------------------
+
+const HINT_KEY = 'pp-hints-seen';
+function seenHints(): Set<string> {
+  try {
+    return new Set(JSON.parse(sessionStorage.getItem(HINT_KEY) ?? '[]') as string[]);
+  } catch {
+    return new Set();
+  }
+}
+function markSeen(id: string) {
+  try {
+    const s = seenHints();
+    s.add(id);
+    sessionStorage.setItem(HINT_KEY, JSON.stringify([...s]));
+  } catch {
+    // zonder opslag toont de uitleg gewoon opnieuw
+  }
+}
+
+/** Uitleg bij de huidige fase (alleen met tutorial aan). Weg te klikken, en terug te halen. */
+function TutorialHint({ hint }: { hint: Hint | null }) {
+  const id = hint?.id;
+  const [open, setOpen] = useState(true);
+  useEffect(() => setOpen(id ? !seenHints().has(id) : false), [id]);
+  if (!hint) return null;
+  if (!open)
+    return (
+      <button class="hint-open" onClick={() => setOpen(true)}>
+        ? Uitleg: {hint.title}
+      </button>
+    );
+  return (
+    <div class="hint">
+      <div class="hint-head">
+        <span class="small">Uitleg</span>
+        <b>{hint.title}</b>
+      </div>
+      <ol>
+        {hint.steps.map((t, i) => (
+          <li key={i}>{t}</li>
+        ))}
+      </ol>
+      <button
+        class="small-btn"
+        onClick={() => {
+          markSeen(hint.id);
+          setOpen(false);
+        }}
+      >
+        Begrepen
+      </button>
+    </div>
+  );
+}
+
+function hintFor(view: { state: PublicState; me: PlayerView | null; teamId: string; presidentTeamId: string | null }, extra: Partial<HintContext>): Hint | null {
+  const team = view.state.teams.find((t) => t.id === view.teamId);
+  return phoneHint(view.state, {
+    myTurn: !!view.me?.pickPending,
+    tab: 'kaarten',
+    handCount: view.me?.hand.length ?? 0,
+    ready: !!team?.ready,
+    locked: !!team?.locked,
+    isPresident: view.presidentTeamId === view.teamId,
+    coins: team?.coins ?? 0,
+    ...extra,
+  });
+}
 
 function CardRow({
   def,
@@ -358,6 +428,7 @@ function Lobby({ view, act, president }: GameProps) {
   const enough = state.teams.length >= 2;
   return (
     <section class="stack">
+      <TutorialHint hint={hintFor(view, {})} />
       <p class="dim">
         Je bent manager van het team van <b>{team.name}</b>. Geef je drie renners een naam, of houd de willekeurige namen.
       </p>
@@ -425,6 +496,7 @@ function Draft({ view, act }: ViewProps) {
   const picksLeft = d.order.slice(d.idx).filter((id) => id === view.teamId).length;
   return (
     <section class="stack">
+      <TutorialHint hint={hintFor(view, { myTurn: mine })} />
       <div class={`turn frame ${mine ? 'mine' : ''}`}>
         {mine ? (
           <>
@@ -503,6 +575,7 @@ function TeamPhase({ view, act }: ViewProps) {
           </button>
         ))}
       </div>
+      <TutorialHint hint={hintFor(view, { tab })} />
       {me!.sabotageOn.length > 0 && (
         <div class="frame warn">Iemand heeft iets slechts in de zin met jouw team... Je merkt het straks in de race.</div>
       )}
@@ -857,6 +930,7 @@ function Race({ view, act }: ViewProps) {
 
   return (
     <section class="stack">
+      <TutorialHint hint={hintFor(view, { locked })} />
       {ev && (
         <div class={`event frame ${ev.silly ? 'silly' : ''}`}>
           <b>{ev.title}.</b> {ev.blurb}
@@ -947,6 +1021,7 @@ function Resolve({ view }: { view: View }) {
   const mine = state.riders.filter((r) => r.teamId === teamId);
   return (
     <section class="stack">
+      <TutorialHint hint={hintFor(view, {})} />
       <p class="center ty">KIJK NAAR DE TV</p>
       {rep &&
         mine.map((r) => {
@@ -995,6 +1070,7 @@ function Results({ view, president }: { view: View; president: (w: PresidentActi
   const sab = res.sabotages.filter((x) => x.toTeamId === teamId || x.fromTeamId === teamId);
   return (
     <section class="stack">
+      <TutorialHint hint={hintFor(view, {})} />
       <div class="frame center big-result">
         <div class="small">Etappe {res.stage}</div>
         <div class="place">{ordinal(place)}</div>
@@ -1046,6 +1122,7 @@ function Finished({ view, president }: { view: View; president: (w: PresidentAct
   const awards = res.awards.filter((a) => a.teamId === teamId);
   return (
     <section class="stack">
+      <TutorialHint hint={hintFor(view, {})} />
       <div class="frame center big-result">
         <div class="small">Seizoen afgerond</div>
         <div class="place">{ordinal(place)}</div>

@@ -651,3 +651,30 @@
 .tutstate.on {
   color: var(--accent);
 }
+
+/* ---- Tutorial-kaart op de tv ---- */
+.side.with-tut {
+  grid-template-rows: auto auto 1fr;
+}
+.tutcard {
+  padding: 16px 18px;
+  background: #2a2412;
+  box-shadow: inset 5px 0 0 var(--accent);
+}
+.tutcard .tag {
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.tutcard p {
+  margin: 0;
+  font-size: clamp(15px, 1.25vw, 20px);
+  line-height: 1.4;
+  font-weight: 600;
+}
+.tutcard.inline {
+  border-radius: var(--r-md);
+  padding: 14px 18px;
+}
+.tutcard.inline p {
+  font-size: clamp(16px, 1.35vw, 22px);
+}

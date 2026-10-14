@@ -245,12 +245,18 @@ export class Room {
         }
         this.setPhaseTimer(this.scaled(TIMING.draftMs), { type: 'timeout' });
         this.scheduleBotDraft();
+        this.nudgeDraftTurn();
         break;
       }
       case 'team': {
         this.say([...teamPhaseLines(pub), ...this.explain('team')]);
         this.setPhaseTimer(this.scaled(TIMING.teamMs), { type: 'timeout' });
         this.scheduleBotTeams();
+        // Uitleg in doseerbare stukjes, terwijl spelers aan het werk zijn.
+        if (this.state.tutorial) {
+          this.after(this.scaled(30_000), () => this.say(this.explain('train')), true);
+          this.after(this.scaled(55_000), () => this.say(this.explain('trade')), true);
+        }
         break;
       }
       case 'race': {
@@ -280,6 +286,17 @@ export class Room {
         this.feed = [];
         break;
     }
+  }
+
+  /** Met tutorial aan: zeg wie er aan de beurt is, zodat niemand zijn kans mist. */
+  private nudgeDraftTurn(): void {
+    if (!this.state.tutorial) return;
+    const id = this.state.draft ? this.state.draft.order[this.state.draft.idx] : null;
+    const team = this.state.teams.find((t) => t.id === id);
+    if (!team || team.isBot) return;
+    this.say([
+      { speaker: 'johan', text: `${team.name}, jij bent aan de beurt. Pak een kaart op je telefoon.` },
+    ]);
   }
 
   // ---- Bots ----

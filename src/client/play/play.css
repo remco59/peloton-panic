@@ -747,3 +747,51 @@ p {
   flex-direction: column;
   gap: 10px;
 }
+
+/* ---- Tutorial-uitleg ---- */
+.hint {
+  background: #2a2412;
+  border-radius: var(--r-lg);
+  padding: 14px 16px 12px;
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+.hint-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+.hint-head .small {
+  color: var(--accent);
+}
+.hint-head b {
+  font-size: 17px;
+}
+.hint ol {
+  margin: 0 0 12px;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14.5px;
+  line-height: 1.4;
+}
+.hint li::marker {
+  color: var(--accent);
+  font-weight: 700;
+}
+.hint .small-btn {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+}
+.hint-open {
+  align-self: flex-start;
+  border: 0;
+  background: #2a2412;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 999px;
+}

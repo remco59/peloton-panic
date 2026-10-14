@@ -51,9 +51,19 @@ Een rustdag of fysiotherapeut helpt.
 
 ## Tutorial-modus
 
-De president zet de tutorial aan in de lobby. Er is geen apart spel: iedereen speelt gewoon
-mee, en de commentatoren leggen onderweg uit wat er gebeurt (draft, voorbereiding, tempo kiezen,
-drafting, uitslag), elk onderwerp één keer. Er is meer tijd per fase.
+De president zet de tutorial aan in de lobby. Er is geen apart spel: iedereen speelt gewoon mee,
+tegen elkaar of tegen bots. De tutorial voegt uitleg toe op drie plekken:
+
+- **Telefoon**: boven elk scherm staat een uitlegkaart die past bij wat je nu doet (je beurt in de
+  draft, welk tabblad je open hebt, tempo kiezen). Met *Begrepen* klap je hem dicht, met
+  *? Uitleg* haal je hem terug.
+- **Tv**: een instructiekaart zegt wat er nu van de spelers wordt verwacht.
+- **Commentatoren**: ze leggen in korte blokken uit wat er gebeurt (draft, voorbereiding,
+  training, ruilen, tempo kiezen, drafting, uitslag), elk onderwerp één keer. Ze noemen ook wie
+  er aan de beurt is. Er is meer tijd per fase.
+
+De uitleg staat in `src/shared/tutorial.ts` (telefoon en tv) en `src/shared/commentary.ts`
+(commentatoren).
 
 ## Commentatoren
 

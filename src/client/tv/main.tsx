@@ -18,6 +18,7 @@ import {
 } from '../../shared/content';
 import type { CommentatorId } from '../../shared/content';
 import { effectiveStats, perksOf, teamDefIds } from '../../shared/engine';
+import { tvHint } from '../../shared/tutorial';
 import type { FeedBatch, RoomInfo, ServerMsg } from '../../shared/protocol';
 import type { PublicState, PublicTeam, Rider, Stat } from '../../shared/types';
 import { STAGES } from '../../shared/types';
@@ -130,7 +131,8 @@ function App() {
       <Header snap={snap} clock={clock} online={online} />
       <div class="main">
         <Stage state={state} />
-        <aside class="side">
+        <aside class={`side ${state.tutorial && state.phase !== 'draft' && state.phase !== 'team' ? 'with-tut' : ''}`}>
+          {state.phase !== 'draft' && state.phase !== 'team' && <TutorialCard state={state} />}
           {inRace ? <EventCard state={state} /> : <StageCard state={state} />}
           <Standings snap={snap} />
         </aside>
@@ -200,6 +202,17 @@ function Stage({ state }: { state: PublicState }) {
 function demo(state: PublicState): PublicState {
   if (state.terrain.length > 0) return state;
   return { ...state, terrain: Array.from({ length: 32 }, () => 'flat' as const), trackLength: 32 };
+}
+
+function TutorialCard({ state, inline }: { state: PublicState; inline?: boolean }) {
+  const h = tvHint(state);
+  if (!h) return null;
+  return (
+    <div class={`tutcard ${inline ? 'inline' : 'frame'}`}>
+      <div class="tag ty">TUTORIAL · {h.title.toUpperCase()}</div>
+      <p>{h.text}</p>
+    </div>
+  );
 }
 
 function StageCard({ state }: { state: PublicState }) {
@@ -434,6 +447,7 @@ function DraftPanel({ snap }: { snap: Snapshot }) {
           })}
         </div>
       </div>
+      <TutorialCard state={state} inline />
       <div class="kicker ty">DE MARKT ({state.deckCount} kaarten op de stapel)</div>
       <div class="market">
         {state.market.map((def, i) => (
@@ -457,6 +471,7 @@ function TeamPanel({ snap }: { snap: Snapshot }) {
           <div class="big-line ty">Train je renners, bouw je team uit en ruil met de rest</div>
         </div>
       </div>
+      <TutorialCard state={state} inline />
       <div class="boards">
         {state.teams.map((t) => {
           const col = colorOf(t);
