@@ -926,11 +926,11 @@ export function contractValue(d: CardDef): number {
   return (
     (d.signing ?? 0) +
     (p.income ?? 0) * 2.5 +
-    (p.podiumBonus ?? 0) * 1.5 +
-    (p.winBonus ?? 0) * 1 +
+    (p.podiumBonus ?? 0) * 0.8 +
+    (p.winBonus ?? 0) * 0.6 +
     (p.pointBonus ?? 0) * 5.5 +
     (p.gels ?? 0) * 3 +
-    (p.colas ?? 0) * 3.5 +
+    (p.colas ?? 0) * 3 +
     (p.service ?? 0) * 3 +
     (p.startEnergy ?? 0) * 1.5 +
     (p.shield ?? 0) * 2.5 +

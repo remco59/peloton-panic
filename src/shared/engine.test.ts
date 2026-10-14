@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   botDraft,
   botEfforts,
-  botRecruit,
+  botShopStep,
   crashChance,
   groupsOf,
   isWet,
@@ -27,6 +27,7 @@ import {
   COLA_BONUS,
   CRASH_LOSS,
   RECRUIT_PICKS,
+  SHOP_CONTRACTS,
   TEAM_BONUS,
   ENERGY_MIN,
   GEL_ENERGY,
@@ -40,8 +41,8 @@ import {
   STAGES,
   TRACK_LENGTH,
 } from './types';
-import { EVENTS, EVENT_IDS } from './content';
-import type { Action, Card, Effort, GameState, RacePlay } from './types';
+import { CARD_DEFS, EVENTS, EVENT_IDS } from './content';
+import type { Action, Card, Effort, GameState, RacePlay, ShopItem } from './types';
 
 function lobby(n: number, seed = 42): GameState {
   let s = createGame(seed);
@@ -52,13 +53,17 @@ function lobby(n: number, seed = 42): GameState {
 /** Start het seizoen en slaat de uitleg over: het rekruteren is open. */
 const briefed = (n = 3, seed = 42) => reduce(reduce(lobby(n, seed), { type: 'start' }), { type: 'briefDone' });
 
-/** Rekruteert door steeds de goedkoopste renner te nemen: zo houdt elk team zijn startmunten. */
+/** Koopt per team de drie goedkoopste (gratis) renners en zet op klaar: zo houdt elk team zijn startmunten. */
 function finishRecruit(s: GameState): GameState {
-  while (s.phase === 'recruit') {
-    const teamId = s.recruit!.order[s.recruit!.idx];
-    const prices = s.recruit!.market.map((c) => c.price);
-    const index = prices.indexOf(Math.min(...prices));
-    s = reduce(s, { type: 'recruit', teamId, index });
+  if (s.phase === 'recruit') {
+    for (const t of s.teams) {
+      const riders = s.recruit!.shops[t.id]
+        .filter((x): x is Extract<ShopItem, { kind: 'rider' }> => x.kind === 'rider')
+        .sort((x, y) => x.price - y.price)
+        .slice(0, RECRUIT_PICKS);
+      for (const r of riders) s = reduce(s, { type: 'recruit', teamId: t.id, itemId: r.id });
+      s = reduce(s, { type: 'ready', teamId: t.id });
+    }
   }
   return finishNaming(s);
 }
@@ -286,7 +291,8 @@ describe('winkel, training en spullen', () => {
 
   it('optelling van eigenschappen klopt', () => {
     const p = perksOf(['bakker', 'bank', 'voeding', 'teambus', 'fysio']);
-    expect(p.income).toBe(5);
+    expect(p.income).toBe(2);
+    expect(p.podiumBonus).toBe(3);
     expect(p.startEnergy).toBe(5);
     expect(p.shield).toBe(0);
     expect(p.overtrainTolerance).toBe(1);
@@ -836,47 +842,91 @@ describe('koerskaarten en volgauto', () => {
 });
 
 describe('rekruteren', () => {
-  it('opent met een gedeelde markt en een slangvolgorde van drie rondes', () => {
+  const ridersOf = (s: GameState, id: string) =>
+    s.recruit!.shops[id].filter((x): x is Extract<ShopItem, { kind: 'rider' }> => x.kind === 'rider');
+  const contractsOf = (s: GameState, id: string) =>
+    s.recruit!.shops[id].filter((x): x is Extract<ShopItem, { kind: 'contract' }> => x.kind === 'contract');
+
+  it('geeft elk team een eigen winkel met negen renners en zes contracten', () => {
     const s = briefed(3);
     expect(s.phase).toBe('recruit');
     expect(s.riders).toHaveLength(0);
-    expect(s.recruit!.order).toHaveLength(3 * RECRUIT_PICKS);
-    expect(s.recruit!.market).toHaveLength(6);
-    // Meer opties: de markt toont meer dan één type renner en altijd een gratis renner.
-    expect(new Set(s.recruit!.market.map((c) => c.rider.type)).size).toBeGreaterThanOrEqual(3);
-    expect(s.recruit!.market.some((c) => c.price === 0)).toBe(true);
-    // Heen, terug, heen.
-    const o = s.recruit!.order;
-    expect(o.slice(3, 6)).toEqual([...o.slice(0, 3)].reverse());
-    expect(o.slice(6, 9)).toEqual(o.slice(0, 3));
+    for (const t of s.teams) {
+      expect(t.coins).toBe(START_COINS);
+      const riders = ridersOf(s, t.id);
+      expect(riders).toHaveLength(9);
+      expect(new Set(riders.map((r) => r.rider.type)).size).toBe(5);
+      expect(riders.filter((r) => r.price === 0).length).toBeGreaterThanOrEqual(3);
+      expect(riders.some((r) => r.price === 5)).toBe(true);
+      const contracts = contractsOf(s, t.id);
+      expect(contracts).toHaveLength(SHOP_CONTRACTS);
+      for (const f of ['cash', 'bonus', 'supply'])
+        expect(contracts.some((c) => CARD_DEFS[c.def].contract === f)).toBe(true);
+    }
+    // De winkels delen geen renner en geen naam.
+    const ids = s.teams.flatMap((t) => ridersOf(s, t.id).map((x) => x.id));
+    expect(new Set(ids).size).toBe(ids.length);
+    const names = s.teams.flatMap((t) => ridersOf(s, t.id).map((r) => r.rider.name));
+    expect(new Set(names).size).toBe(names.length);
   });
 
-  it('laat alleen het team aan de beurt kiezen en trekt de prijs af', () => {
+  it('laat teams tegelijk kopen, trekt de prijs af en laat andere winkels ongemoeid', () => {
     let s = briefed(2);
-    const [first, second] = [s.recruit!.order[0], s.recruit!.order[1]];
-    expect(() => reduce(s, { type: 'recruit', teamId: second, index: 0 })).toThrow(RuleError);
-    const idx = s.recruit!.market.findIndex((c) => c.price > 0);
-    const cand = s.recruit!.market[idx];
-    s = reduce(s, { type: 'recruit', teamId: first, index: idx });
-    const team = s.teams.find((t) => t.id === first)!;
-    expect(team.coins).toBe(START_COINS - cand.price);
-    expect(team.riderIds).toHaveLength(1);
-    expect(s.riders.find((r) => r.id === team.riderIds[0])!.teamId).toBe(first);
-    expect(s.recruit!.idx).toBe(1);
-    // De markt wordt aangevuld.
-    expect(s.recruit!.market).toHaveLength(5);
+    const [a, b] = s.teams;
+    const itemA = ridersOf(s, a.id).find((r) => r.price > 0)!;
+    const itemB = ridersOf(s, b.id).find((r) => r.price > 0)!;
+    s = reduce(s, { type: 'recruit', teamId: b.id, itemId: itemB.id });
+    s = reduce(s, { type: 'recruit', teamId: a.id, itemId: itemA.id });
+    expect(s.teams[0].coins).toBe(START_COINS - itemA.price);
+    expect(s.teams[1].coins).toBe(START_COINS - itemB.price);
+    expect(s.riders.find((r) => r.id === s.teams[0].riderIds[0])!.teamId).toBe(a.id);
+    expect(s.recruit!.shops[a.id]).toHaveLength(14);
+    expect(s.recruit!.shops[b.id]).toHaveLength(14);
   });
 
-  it('weigert een renner die je niet kunt betalen', () => {
-    const s = structuredClone(briefed(2));
-    const teamId = s.recruit!.order[0];
-    s.teams.find((t) => t.id === teamId)!.coins = 0;
-    const idx = s.recruit!.market.findIndex((c) => c.price > 0);
-    if (idx >= 0) expect(() => reduce(s, { type: 'recruit', teamId, index: idx })).toThrow(RuleError);
+  it('weigert items uit andermans winkel, een vierde renner en onbetaalbare renners', () => {
+    let s = briefed(2);
+    const [a, b] = s.teams;
+    const foreign = ridersOf(s, b.id)[0];
+    expect(() => reduce(s, { type: 'recruit', teamId: a.id, itemId: foreign.id })).toThrow(RuleError);
+    const poor = structuredClone(s);
+    poor.teams[0].coins = 0;
+    const dear = ridersOf(poor, a.id).find((r) => r.price > 0)!;
+    expect(() => reduce(poor, { type: 'recruit', teamId: a.id, itemId: dear.id })).toThrow(RuleError);
+    for (const r of ridersOf(s, a.id).filter((x) => x.price === 0).slice(0, 3))
+      s = reduce(s, { type: 'recruit', teamId: a.id, itemId: r.id });
+    const fourth = ridersOf(s, a.id)[0];
+    expect(() => reduce(s, { type: 'recruit', teamId: a.id, itemId: fourth.id })).toThrow(RuleError);
   });
 
-  it('geeft na de laatste keuze elk team precies drie renners en gaat naar de namen', () => {
-    const s = started(4);
+  it('een contract is gratis, betaalt bij het tekenen uit en past maximaal twee keer', () => {
+    let s = briefed(2);
+    const t = s.teams[0];
+    s = reduce(s, { type: 'recruit', teamId: t.id, itemId: contractsOf(s, t.id)[0].id });
+    s = reduce(s, { type: 'recruit', teamId: t.id, itemId: contractsOf(s, t.id)[0].id });
+    const team = s.teams[0];
+    expect(team.slots.sponsor).toHaveLength(2);
+    const signed = team.slots.sponsor.reduce((n, c) => n + (CARD_DEFS[c.def].signing ?? 0), 0);
+    expect(team.coins).toBe(START_COINS + signed);
+    expect(() => reduce(s, { type: 'recruit', teamId: t.id, itemId: contractsOf(s, t.id)[0].id })).toThrow(RuleError);
+  });
+
+  it('klaar vraagt drie renners en blokkeert verder winkelen', () => {
+    let s = briefed(2);
+    const t = s.teams[0];
+    expect(() => reduce(s, { type: 'ready', teamId: t.id })).toThrow(RuleError);
+    for (const r of ridersOf(s, t.id).filter((x) => x.price === 0).slice(0, 3))
+      s = reduce(s, { type: 'recruit', teamId: t.id, itemId: r.id });
+    s = reduce(s, { type: 'ready', teamId: t.id });
+    expect(s.phase).toBe('recruit');
+    expect(() => reduce(s, { type: 'recruit', teamId: t.id, itemId: contractsOf(s, t.id)[0].id })).toThrow(RuleError);
+    s = reduce(s, { type: 'unready', teamId: t.id });
+    s = reduce(s, { type: 'recruit', teamId: t.id, itemId: contractsOf(s, t.id)[0].id });
+    expect(s.teams[0].slots.sponsor).toHaveLength(1);
+  });
+
+  it('gaat naar de namen zodra iedereen klaar is, met drie renners per team', () => {
+    const s = finishRecruit(briefed(4));
     expect(s.phase).toBe('draft');
     expect(s.recruit).toBeNull();
     for (const t of s.teams) {
@@ -887,26 +937,28 @@ describe('rekruteren', () => {
     expect(new Set(s.riders.map((r) => r.name)).size).toBe(s.riders.length);
   });
 
-  it('time-out rekruteert automatisch iets wat het team kan betalen', () => {
+  it('time-out winkelt automatisch en eindigt de fase', () => {
     let s = briefed(3);
-    for (let i = 0; i < 9; i++) s = reduce(s, { type: 'timeout' });
+    s = reduce(s, { type: 'timeout' });
     expect(s.phase).toBe('naming');
     for (const t of s.teams) {
-      expect(t.riderIds).toHaveLength(3);
+      expect(t.riderIds).toHaveLength(RECRUIT_PICKS);
       expect(t.coins).toBeGreaterThanOrEqual(0);
+      expect(t.slots.sponsor.length).toBeLessThanOrEqual(2);
     }
   });
 
-  it('een bot kiest altijd een betaalbare renner', () => {
+  it('een botstap is altijd legaal en eindigt bij klaar', () => {
     const rand = makeRand(5);
-    let s = briefed(6, 3);
-    while (s.phase === 'recruit') {
-      const teamId = s.recruit!.order[s.recruit!.idx];
-      const idx = botRecruit(s, teamId, rand);
-      expect(s.recruit!.market[idx].price).toBeLessThanOrEqual(s.teams.find((t) => t.id === teamId)!.coins);
-      s = reduce(s, { type: 'recruit', teamId, index: idx });
-    }
-    expect(s.riders).toHaveLength(18);
+    let s = reduce(lobby(2, 3), { type: 'join', name: 'Bot', isBot: true });
+    s = reduce(reduce(s, { type: 'start' }), { type: 'briefDone' });
+    const bot = s.teams.find((t) => t.isBot)!;
+    for (let i = 0; i < 20 && !s.ready[bot.id]; i++) s = reduce(s, botShopStep(s, bot.id, rand)!);
+    const team = s.teams.find((t) => t.id === bot.id)!;
+    expect(s.ready[bot.id]).toBe(true);
+    expect(team.riderIds).toHaveLength(RECRUIT_PICKS);
+    expect(team.coins).toBeGreaterThanOrEqual(0);
+    expect(botShopStep(s, bot.id, rand)).toBeNull();
   });
 
   it('een nieuw seizoen begint weer met rekruteren', () => {
@@ -917,6 +969,61 @@ describe('rekruteren', () => {
     expect(s.teams.every((t) => t.riderIds.length === 0)).toBe(true);
     s = reduce(reduce(s, { type: 'start' }), { type: 'briefDone' });
     expect(s.phase).toBe('recruit');
+    expect(s.teams.every((t) => t.coins === START_COINS)).toBe(true);
+  });
+});
+
+describe('sponsorcontracten', () => {
+  /** Team 0 tekent dit contract in de winkel; daarna wordt er verder gerekruteerd tot de draft. */
+  const withContract = (def: string): GameState => {
+    let s = briefed(3, 8);
+    s.recruit!.shops[s.teams[0].id].push({ id: 'c-test', kind: 'contract', def });
+    s = reduce(s, { type: 'recruit', teamId: s.teams[0].id, itemId: 'c-test' });
+    return finishRecruit(s);
+  };
+  const count = (s: GameState, i: number, def: string) => s.teams[i].hand.filter((c) => c.def === def).length;
+
+  it('levert in etappe 1 extra gels en cola af', () => {
+    const s = withContract('colafabriek');
+    expect(count(s, 0, 'cola') - count(s, 1, 'cola')).toBe(1);
+    expect(count(s, 0, 'gel') - count(s, 1, 'gel')).toBe(1);
+  });
+
+  it('levert bij elke volgende etappe opnieuw', () => {
+    let s = withContract('gelfabriek');
+    s.phase = 'results';
+    s.stageResult = { stage: 1 } as GameState['stageResult'];
+    const before = [count(s, 0, 'gel'), count(s, 1, 'gel')];
+    s = reduce(s, { type: 'nextStage' });
+    expect(s.stage).toBe(2);
+    expect(count(s, 0, 'gel') - before[0]).toBe(count(s, 1, 'gel') - before[1] + 2);
+  });
+
+  /** Speelt etappe 1 met een kopman van team 0 die wint, en geeft de uitslag. */
+  const winStage = (def: string, winner: 0 | 1) => {
+    let s = withContract(def);
+    s = finishDraft(s);
+    for (const t of s.teams) s = reduce(s, { type: 'ready', teamId: t.id });
+    const kop = s.teams.map((t) => s.kopman[t.id]);
+    s.riders.forEach((r) => (r.pos = r.id === kop[winner] ? TRACK_LENGTH - 1 : 5));
+    s.premies = [];
+    s = lockAll(s, 'alles');
+    s = reduce(s, { type: 'next' });
+    return s.stageResult!;
+  };
+
+  it('betaalt de bank bij een podium en de energiedrank bij winst', () => {
+    expect(winStage('bank', 0).teams[0].sponsorCoins).toBe(1 + 3);
+    const d = winStage('drankje', 0).teams[0];
+    expect(d.sponsorCoins).toBe(4 + 2);
+    const lost = winStage('drankje', 1).teams[0];
+    expect(lost.sponsorCoins).toBeLessThanOrEqual(2);
+  });
+
+  it('betaalt de omroep per drie etappepunten', () => {
+    const r = winStage('omroep', 0).teams[0];
+    expect(r.sponsorCoins).toBe(Math.floor(r.stagePoints / 3));
+    expect(r.sponsorCoins).toBeGreaterThan(0);
   });
 });
 
@@ -1116,9 +1223,12 @@ describe('pech en volgauto', () => {
 describe('namen geven', () => {
   const named = () => {
     let s = briefed(3, 21);
-    while (s.phase === 'recruit') {
-      const teamId = s.recruit!.order[s.recruit!.idx];
-      s = reduce(s, { type: 'recruit', teamId, index: botRecruit(s, teamId, () => 0.5) });
+    for (const t of s.teams) {
+      let a = botShopStep(s, t.id, () => 0.5);
+      while (a) {
+        s = reduce(s, a);
+        a = botShopStep(s, t.id, () => 0.5);
+      }
     }
     return s;
   };
@@ -1158,10 +1268,15 @@ describe('namen geven', () => {
   it('bots zijn meteen klaar', () => {
     let s = reduce(lobby(1, 4), { type: 'join', name: 'Bot', isBot: true });
     s = reduce(reduce(s, { type: 'start' }), { type: 'briefDone' });
-    while (s.phase === 'recruit') {
-      const teamId = s.recruit!.order[s.recruit!.idx];
-      s = reduce(s, { type: 'recruit', teamId, index: botRecruit(s, teamId, () => 0.5) });
+    let a = botShopStep(s, s.teams[1].id, () => 0.5);
+    while (a) {
+      s = reduce(s, a);
+      a = botShopStep(s, s.teams[1].id, () => 0.5);
     }
+    const human = s.teams[0].id;
+    for (const r of s.recruit!.shops[human].filter((x) => x.kind === 'rider' && x.price === 0).slice(0, 3))
+      s = reduce(s, { type: 'recruit', teamId: human, itemId: r.id });
+    s = reduce(s, { type: 'ready', teamId: human });
     expect(s.phase).toBe('naming');
     expect(toPublic(s).teams.find((t) => t.isBot)!.ready).toBe(true);
     s = reduce(s, { type: 'ready', teamId: s.teams[0].id });

@@ -1,6 +1,7 @@
 // Tutorial-inhoud: korte, concrete uitleg per fase, voor de telefoon en de tv.
 // De tutorial is geen apart spel: iedereen speelt gewoon mee en deze kaarten verschijnen erbij.
 
+import { START_COINS } from './types';
 import type { PublicState } from './types';
 
 export type PhoneTab = 'plan' | 'kaarten' | 'team' | 'winkel' | 'ruilen';
@@ -49,7 +50,7 @@ export function phoneHint(s: PublicState, c: HintContext): Hint | null {
         id: 'recruit-shop',
         title: 'Je eigen winkel',
         steps: [
-          'Iedereen heeft een eigen winkel, dus je hoeft niet op een ander te wachten. Je begint met € 10.',
+          `Iedereen heeft een eigen winkel, dus je hoeft niet op een ander te wachten. Je begint met € ${START_COINS}.`,
           'Tab Renners: kies er drie. Neo-profs zijn gratis, talenten en sterren kosten munten. Maak een mix van types.',
           'Tab Sponsors: teken er maximaal twee. Ze kosten niets. Sommige betalen meteen, sommige alleen als je presteert, en sommige leveren spullen.',
           'Munten die je overhoudt, heb je later nodig voor kaarten. Druk op Klaar als je er drie hebt.',

@@ -32,22 +32,38 @@ en hoe je bedient. De president bladert
 iedereen op *Ik snap het*. Pas daarna begint de draft. De tekst staat in `BRIEFING` in
 `src/shared/content.ts`.
 
-## Rekruteren: je eigen ploeg
+## Rekruteren: je eigen winkel
 
-Na de uitleg kiest iedereen om de beurt **drie renners** uit een gedeelde pool (heen, terug, heen).
-De pool is een markt van `teams + 3` kandidaten die steeds wordt aangevuld, met verschillende
-types: sprinter, klimmer, rouleur, puncheur en knecht. Elke kandidaat heeft een talentniveau en een
-eigenaardigheid:
+Na de uitleg heeft **elk team een eigen, privé winkel**. Er is geen gedeelde pool en geen beurtvolgorde:
+iedereen winkelt tegelijk op zijn telefoon (de tv toont per team hoe ver het is). Je start met
+**€ 10** en kiest **drie renners** en maximaal **twee sponsors**. Druk op **Klaar** als je tevreden
+bent; zodra iedereen klaar is (of de timer afloopt) gaat het spel door.
 
-| Niveau | Prijs | Sterkte |
+### Renners
+
+Elke winkel heeft negen renners van alle vijf de types (sprinter, klimmer, rouleur, puncheur,
+knecht), elk met een eigenaardigheid:
+
+| Niveau | Prijs | In de winkel | Sterkte |
+| --- | --- | --- | --- |
+| Neo-prof | gratis | 3 | -1 op zijn hoofdeigenschap |
+| Vaste waarde | € 2 | 3 | standaard |
+| Talent | € 3 | 2 | +1 op zijn hoofdeigenschap |
+| Ster | € 5 | 1 | +1 hoofdeigenschap en +1 extra |
+
+Munten die je hier uitgeeft, heb je later niet meer voor kaarten.
+
+### Sponsorcontracten
+
+Sponsors zitten niet meer in de kaartstapel maar in de winkel: zes contracten per team, van elke
+soort minstens één. Een contract kost niets, maar er passen er maar twee op je shirt. Er zijn drie
+soorten:
+
+| Soort | Voorbeelden | Hoe het betaalt |
 | --- | --- | --- |
-| Neo-prof | gratis | -1 op zijn hoofdeigenschap |
-| Vaste waarde | € 1 | standaard |
-| Talent | € 2 | +1 op zijn hoofdeigenschap |
-| Ster | € 3 | +1 hoofdeigenschap en +1 extra |
-
-Er ligt altijd minstens één gratis renner op de markt. Munten die je hier uitgeeft, heb je later niet
-meer voor kaarten.
+| Direct geld | Aannemer Van Dijk (€ 5), Bakkerij De Gouden Korst (€ 3 + € 1 per etappe) | Meteen bij het tekenen, dus meer budget voor renners |
+| Bonus | Regiobank (podium), Energiedrank XL (etappewinst en podium), Regionale Omroep (€ 1 per 3 punten) | Alleen als je presteert |
+| Leverancier | Gelfabriek (gels), Colafabriek (cola en gel), Autodealer (volgauto), Fietsenmaker (pech gedekt), Fysiopraktijk (herstel) | Elke etappe extra spullen en staf, gratis |
 
 Daarna geeft iedereen zijn renners een naam (of houdt de willekeurige namen). Daar zit geen timer
 op: de draft begint zodra iedereen op **Klaar** drukt. Bots zijn meteen klaar.
@@ -118,7 +134,6 @@ rustdag of fysiotherapeut helpt.
 | Soort | Voorbeelden |
 | --- | --- |
 | Training | Duurloop, Krachttraining, Klimstage, Hoogtestage, Trainingskamp, Rustdag |
-| Sponsor | Bakkerij, Regiobank, Energiedrank (munten per etappe) |
 | Staf | Mecanicien, Soigneur, Ploegleider, Voedingsdeskundige, Fysio |
 | Materiaal | Reservefiets, Aero-wielen, Lichte klimfiets, Regenbanden |
 | Wagen | Volgauto, Teambus |
