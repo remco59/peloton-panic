@@ -486,40 +486,6 @@ p {
   flex-direction: column;
   gap: 10px;
 }
-.pcard {
-  background: var(--panel);
-  border-radius: var(--r-md);
-  border-left: 5px solid var(--k, var(--line));
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.pcard.dim {
-  opacity: 0.5;
-}
-.pc-top {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.pc-kind {
-  color: var(--k);
-}
-.pc-price {
-  color: var(--accent);
-}
-.pc-name {
-  font-weight: 800;
-  font-size: 17px;
-}
-.pc-text {
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.35;
-}
 .pc-actions {
   margin-top: 8px;
   display: flex;
@@ -801,16 +767,38 @@ p {
 .eff.on .en {
   color: var(--on-accent);
 }
+/* Kaarten krimpen nooit onder hun inhoud (dat gaf overlappende renners); past het niet, dan scrolt de lijst. */
 .riders {
   gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.riders::-webkit-scrollbar {
+  display: none;
 }
 .rider {
-  flex: 1;
-  min-height: 0;
-  max-height: 170px;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 12px;
+  flex: none;
+  gap: 4px;
+  padding: 7px 12px;
+}
+.rider .r-top .info {
+  width: 26px;
+  height: 26px;
+}
+.rider .efforts {
+  gap: 6px;
+}
+.rider .eff {
+  gap: 0;
+  padding: 4px 4px;
+}
+.rider .eff .mv {
+  font-size: 16px;
+}
+.rider .xbtn {
+  padding: 6px 8px;
 }
 .rider .r-top {
   align-items: center;
@@ -926,6 +914,13 @@ p {
 .hint-slot {
   display: contents;
 }
+/* Eén knop op de racepagina: label en waarde op één regel, dat scheelt een rij. */
+.strip.one .strip-btn {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 12px;
+}
 .hint-btn,
 .info {
   flex: none;
@@ -955,61 +950,11 @@ p {
 
 /* Kaarten als tegel (hand) of rij (markt, winkel); details in een sheet. */
 .list,
-.tiles {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.tiles {
+.cards {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-}
-.list.grow {
-  justify-content: flex-start;
-}
-.ctile {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 52px;
-  padding: 8px 12px;
-  text-align: left;
-  border: 0;
-  border-left: 5px solid var(--k, var(--line));
-  border-radius: var(--r-md);
-  background: var(--panel);
-}
-.list.grow .ctile {
-  flex: 1;
-  max-height: 72px;
-}
-.ctile.dim {
-  opacity: 0.55;
-}
-.ct-main {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.ct-kind {
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--k);
-}
-.ct-name {
-  font-weight: 700;
-  font-size: 15px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.ct-price {
-  flex: none;
-  color: var(--accent);
-  font-size: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 4px 2px 8px;
 }
 .shop-top {
   display: flex;
@@ -1117,9 +1062,6 @@ select.pick {
   padding: 6px 16px 4px;
   font-size: 15px;
 }
-.sheet .pcard {
-  background: var(--panel-2);
-}
 .sheet .frame {
   background: var(--panel-2);
 }
@@ -1146,4 +1088,463 @@ select.pick {
 }
 .big.slim {
   padding: 12px 14px;
+}
+
+/* ---- Uitleg vooraf ---- */
+.brief-top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.dots {
+  display: flex;
+  gap: 5px;
+}
+.dots i {
+  width: 18px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--panel-2);
+}
+.dots i.done {
+  background: var(--muted);
+}
+.dots i.on {
+  background: var(--accent);
+}
+.brief {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}
+.brief h2 {
+  margin: 0;
+  font-size: 24px;
+  color: var(--accent);
+}
+.brief .lead {
+  font-size: 17px;
+  line-height: 1.35;
+}
+.bpoints {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bp {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--panel);
+  font-size: 14px;
+  line-height: 1.35;
+}
+.bp b {
+  font-size: 13px;
+  color: var(--accent);
+}
+.link-btn {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 4px;
+  text-decoration: underline;
+}
+
+/* ---- Parcours ---- */
+.profile {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 18px 0 8px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  flex: none;
+}
+.profile .flags {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 14px;
+}
+.profile .flag {
+  position: absolute;
+  transform: translateX(-4px);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.profile .flag.closed {
+  color: var(--muted);
+}
+.profile .cells {
+  position: relative;
+  display: flex;
+  height: 16px;
+  border-radius: 4px;
+  overflow: visible;
+}
+.profile .pf {
+  flex: 1;
+  height: 100%;
+}
+.profile .cells .pf:first-child {
+  border-radius: 4px 0 0 4px;
+}
+.profile .cells .pf:last-of-type {
+  border-radius: 0 4px 4px 0;
+}
+.pf-flat {
+  background: #4a4e5d;
+}
+.pf-climb {
+  background: #ff9f43;
+}
+.pf-descent {
+  background: #54a0ff;
+}
+.pf-cobbles {
+  background: #a68a64;
+}
+.profile .dot {
+  position: absolute;
+  top: 3px;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--bg);
+  opacity: 0.55;
+}
+.profile .dot.mine {
+  top: 1px;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  opacity: 1;
+}
+.profile .dot.kop {
+  box-shadow: 0 0 0 2px var(--accent);
+  opacity: 1;
+}
+.finish-flag {
+  position: absolute;
+  right: 0;
+  top: 8px;
+  font-size: 9px;
+  color: var(--ink);
+  display: none;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.legend .pf {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  vertical-align: -1px;
+}
+.plan-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.plan-head b {
+  font-size: 15px;
+}
+
+/* ---- Kopman ---- */
+.kop-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: var(--panel);
+  text-align: left;
+}
+.kop-pick.on {
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.kp-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.kp-tag {
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.rider .kp-tag {
+  margin-left: 0;
+}
+.kp-fit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.efforts.four {
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+}
+.efforts.four .eff {
+  padding: 7px 2px;
+}
+.efforts.four .eff .ty {
+  font-size: 12px;
+}
+.efforts.four .eff .en {
+  font-size: 10px;
+}
+.eff.help .mv {
+  color: var(--good);
+}
+.eff.help.on {
+  background: var(--good);
+  color: var(--on-accent);
+  box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--good);
+}
+.eff.help.on .mv,
+.eff.help.on .en {
+  color: var(--on-accent);
+}
+.eff:disabled {
+  opacity: 0.45;
+}
+.premie-win {
+  flex: none;
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 2px var(--accent);
+  text-align: left;
+}
+
+/* Vijf tabs: tellers hangen in de hoek zodat de namen passen. */
+.tabs {
+  grid-template-columns: repeat(5, 1fr);
+  gap: 3px;
+}
+.tab {
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  padding: 11px 0;
+}
+.tab .badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  margin: 0;
+  padding: 0 5px;
+}
+.kp-fit .ebar {
+  flex: none;
+  width: 100%;
+  height: 8px;
+}
+
+/* ---- Race: volgauto en koerskaarten onder elke renner ---- */
+.extras {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.xbtn {
+  flex: none;
+  border: 0;
+  border-radius: var(--r-md);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 7px 9px;
+  white-space: nowrap;
+}
+.xbtn.on {
+  background: #ff9f43;
+  color: var(--on-accent);
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px #ff9f43;
+}
+.xbtn.car.on {
+  background: #6ea8ff;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px #6ea8ff;
+}
+.xbtn:disabled:not(.on) {
+  opacity: 0.45;
+}
+.energy .el.boost {
+  color: var(--good);
+  font-weight: 800;
+}
+.small-btn.aim {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+}
+
+/* ---- Stand: wie rijdt waar en hoe ver uit elkaar ---- */
+.rider .place {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  font-size: 13px;
+  line-height: 1.2;
+}
+.rider .place .pl {
+  font-size: 15px;
+  min-width: 2ch;
+}
+.rider .place .pl.first {
+  color: var(--accent);
+}
+.rider .place .pl-text {
+  color: var(--ink);
+}
+.rider .place .pl-ahead {
+  color: var(--muted);
+}
+.stand-row {
+  display: grid;
+  grid-template-columns: 2ch 10px minmax(0, 1fr) auto 4ch;
+  gap: 8px;
+  align-items: center;
+  min-height: 30px;
+  font-size: 14px;
+  padding: 0 6px;
+  border-radius: 8px;
+}
+.stand-row.mine {
+  background: var(--panel-2);
+}
+.stand-row .rk {
+  color: var(--muted);
+  font-size: 13px;
+}
+.stand-row .sw {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.stand-row .nm {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stand-row .star {
+  color: var(--accent);
+}
+.stand-row .tl {
+  color: var(--muted);
+  font-size: 12px;
+}
+.stand-row .gl {
+  text-align: right;
+  color: #ff9f9f;
+}
+.stand-row .gl.ok {
+  color: var(--accent);
+  font-size: 11px;
+}
+.stand-gap {
+  margin-left: calc(2ch + 6px + 6px + 4px);
+  padding-left: 14px;
+  height: calc(14px + var(--g, 1) * 4px);
+  display: flex;
+  align-items: center;
+  border-left: 2px dashed var(--line);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.result .now-place {
+  margin-top: 4px;
+  color: var(--ink);
+}
+
+.profile .p-hint {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+/* ---- Rekruteren ---------------------------------------------------------- */
+
+.recruit-note {
+  padding: 14px;
+}
+.recruit-note p {
+  margin: 6px 0 0;
+}
+.cands {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+}
+.cand {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  padding: 10px 12px;
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.cand.poor {
+  opacity: 0.5;
+}
+.cand-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.cand .price {
+  font-size: 11px;
+  color: var(--accent);
+}
+.cand .price.free {
+  color: var(--good);
+}
+.cand-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--muted);
+}
+.cand-stats b {
+  color: var(--ink);
 }

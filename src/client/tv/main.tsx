@@ -4,30 +4,36 @@ import QRCode from 'qrcode';
 import '../common/theme.css';
 import './tv.css';
 import {
+  BRIEFING,
   CARD_DEFS,
   COMMENTATORS,
-  EFFORTS,
   EVENTS,
   KIND_COLORS,
   KIND_LABELS,
+  PREMIE_INFO,
   QUIRKS,
+  WEATHER,
   RIDER_TYPES,
-  STAGE_INFO,
   STAT_LABELS,
   TEAM_COLORS,
 } from '../../shared/content';
 import type { CommentatorId } from '../../shared/content';
 import { effectiveStats, perksOf, teamDefIds } from '../../shared/engine';
+import { stageProfile } from '../../shared/profile';
+import { standing, tiles } from '../../shared/standing';
 import { tvHint } from '../../shared/tutorial';
 import type { FeedBatch, RoomInfo, ServerMsg } from '../../shared/protocol';
 import type { PublicState, PublicTeam, Rider, Stat } from '../../shared/types';
-import { STAGES } from '../../shared/types';
+import { PREMIE_POINTS, STAGES } from '../../shared/types';
+import { sound } from '../common/sound';
 import { openSocket } from '../common/ws';
 import type { Socket } from '../common/ws';
 import { Broadcaster } from './broadcast';
 import type { Caption } from './broadcast';
 import { Avatar } from './avatars';
+import { CardBack, PlayingCard } from '../common/card';
 import { TrackRenderer, terrainColor, H, W } from './render';
+import { Soundtrack } from './soundtrack';
 
 type Snapshot = { state: PublicState; feed: FeedBatch[] } & RoomInfo;
 
@@ -64,9 +70,11 @@ function App() {
       new Broadcaster(
         (c) => setCaption(c),
         () => setAudioOn(true),
+        (talking) => sound.duck(talking),
       ),
     [],
   );
+  const track = useMemo(() => new Soundtrack(), []);
 
   useEffect(() => {
     const origin = location.origin;
@@ -84,11 +92,13 @@ function App() {
           offset.current = msg.serverNow - Date.now();
           setError(null);
           setSnap(msg);
+          track.update(msg.state);
           const maxId = msg.feed.reduce((m, b) => Math.max(m, b.id), 0);
           if (lastFeed.current === null) lastFeed.current = maxId; // sla de geschiedenis over bij laden
           for (const batch of msg.feed) {
             if (batch.id > lastFeed.current) {
               lastFeed.current = batch.id;
+              if (batch.interrupt) broadcaster.clear();
               broadcaster.enqueue(batch.lines);
             }
           }
@@ -103,7 +113,10 @@ function App() {
       },
     });
     sock.current = s;
-    const onKey = () => void broadcaster.unlock();
+    const onKey = () => {
+      sound.unlock();
+      void broadcaster.unlock();
+    };
     window.addEventListener('keydown', onKey);
     window.addEventListener('pointerdown', onKey);
     return () => {
@@ -111,7 +124,8 @@ function App() {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('pointerdown', onKey);
     };
-  }, [broadcaster]);
+  }, [broadcaster, track]);
+  useEffect(() => () => track.destroy(), [track]);
 
   if (!snap) {
     return (
@@ -125,23 +139,31 @@ function App() {
   const { state } = snap;
   const clock = () => Date.now() + offset.current;
   const inRace = state.phase === 'race' || state.phase === 'resolve' || state.phase === 'results';
+  const panelPhase = state.phase === 'draft' || state.phase === 'team' || state.phase === 'recruit' || state.phase === 'naming';
 
   return (
     <div class="tv">
       <Header snap={snap} clock={clock} online={online} />
       <div class="main">
         <Stage state={state} />
-        <aside class={`side ${state.tutorial && state.phase !== 'draft' && state.phase !== 'team' ? 'with-tut' : ''}`}>
-          {state.phase !== 'draft' && state.phase !== 'team' && <TutorialCard state={state} />}
+        <aside class={`side ${state.tutorial && !panelPhase ? 'with-tut' : ''}`}>
+          {!panelPhase && <TutorialCard state={state} />}
           {inRace ? <EventCard state={state} /> : <StageCard state={state} />}
           <Standings snap={snap} />
         </aside>
+        {state.phase === 'recruit' && <RecruitPanel snap={snap} />}
+        {state.phase === 'naming' && <NamingPanel snap={snap} />}
         {state.phase === 'draft' && <DraftPanel snap={snap} />}
         {state.phase === 'team' && <TeamPanel snap={snap} />}
       </div>
       <Minimap state={state} />
-      <Booth caption={caption} audioOn={audioOn} onEnable={() => void broadcaster.unlock()} />
+      <Booth caption={caption} audioOn={audioOn} tutorial={state.tutorial} onEnable={() => {
+          sound.unlock();
+          void broadcaster.unlock();
+        }}
+      />
       {state.phase === 'lobby' && <Lobby snap={snap} />}
+      {state.phase === 'briefing' && <Briefing snap={snap} />}
       {state.phase === 'results' && <Results snap={snap} />}
       {state.phase === 'finished' && <Finished snap={snap} />}
       {error && <div class="toast ty">{error}</div>}
@@ -155,8 +177,17 @@ function Header({ snap, clock, online }: { snap: Snapshot; clock: () => number; 
   useNow(250);
   const { state } = snap;
   const left = snap.phaseEndsAt ? Math.max(0, Math.ceil((snap.phaseEndsAt - clock()) / 1000)) : null;
+  const [muted, setMuted] = useState(sound.muted);
+  useEffect(() => {
+    // The last seconds of a timer tick down out loud.
+    const timed = state.phase === 'recruit' || state.phase === 'draft' || state.phase === 'team' || state.phase === 'race';
+    if (timed && left !== null && left > 0 && left <= 3) sound.ui('count');
+  }, [left, state.phase]);
   const label: Record<string, string> = {
     lobby: 'Lobby',
+    briefing: 'Eerst de uitleg',
+    recruit: 'Rekruteren: kies je renners',
+    naming: 'Geef je renners een naam',
     draft: 'Draft: kies je kaarten',
     team: 'Voorbereiding',
     race: `Ronde ${state.round}: kies je tempo`,
@@ -168,7 +199,7 @@ function Header({ snap, clock, online }: { snap: Snapshot; clock: () => number; 
     <header class="head">
       <div class="logo ty">PELOTON PANIC</div>
       <div class="phase ty">
-        {state.phase === 'lobby' ? 'SEIZOEN' : `ETAPPE ${state.stage}/${STAGES}`}
+        {state.phase === 'lobby' || state.phase === 'briefing' ? 'SEIZOEN' : `ETAPPE ${state.stage}/${STAGES}`}
         <span class="sep">/</span>
         {label[state.phase]}
         {state.tutorial && <span class="tut ty">TUTORIAL</span>}
@@ -176,6 +207,18 @@ function Header({ snap, clock, online }: { snap: Snapshot; clock: () => number; 
       <div class="timer ty">
         {left !== null && state.phase !== 'resolve' ? `${left}s` : ''}
         {!online && <span class="bad"> OFFLINE</span>}
+        <button
+          class="mute ty"
+          aria-label={muted ? 'Geluid aan' : 'Geluid uit'}
+          title={muted ? 'Geluid aan' : 'Geluid uit'}
+          onClick={() => {
+            sound.unlock();
+            sound.setMuted(!muted);
+            setMuted(!muted);
+          }}
+        >
+          {muted ? 'GELUID UIT' : 'GELUID'}
+        </button>
       </div>
     </header>
   );
@@ -216,12 +259,46 @@ function TutorialCard({ state, inline }: { state: PublicState; inline?: boolean 
 }
 
 function StageCard({ state }: { state: PublicState }) {
-  const info = STAGE_INFO[Math.min(STAGES, Math.max(1, state.stage)) - 1];
+  const info = stageProfile(state);
+  const early = state.phase === 'lobby' || state.phase === 'briefing';
   return (
     <div class="event frame">
-      <div class="tag ty">{state.phase === 'lobby' ? 'SEIZOEN' : `ETAPPE ${state.stage}`}</div>
-      <div class="title ty">{state.phase === 'lobby' ? `${STAGES} etappes, 1 winnaar` : info.name}</div>
-      <p>{state.phase === 'lobby' ? 'Bouw je team op, train je renners en win het seizoen.' : info.blurb}</p>
+      <div class="tag ty">{early ? 'SEIZOEN' : `ETAPPE ${state.stage}`}</div>
+      <div class="title ty">{early ? `${STAGES} etappes, 1 winnaar` : info.stageName}</div>
+      <p>{early ? 'Bouw je team op, train je renners en win het seizoen.' : info.stageBlurb}</p>
+      {!early && <p class="profile-line">Parcours: {info.summary}</p>}
+      {!early && state.stage > 0 && (
+        <p class={`weather ${state.weather}`}>
+          <b>
+            {WEATHER[state.weather].icon} {WEATHER[state.weather].label}
+          </b>{' '}
+          · {WEATHER[state.weather].blurb}
+        </p>
+      )}
+      {!early && <PremieList state={state} />}
+    </div>
+  );
+}
+
+/** De premies van deze etappe: waar ze liggen en wie al heeft gescoord. */
+function PremieList({ state }: { state: PublicState }) {
+  if (state.premies.length === 0) return null;
+  const nameOf = (id: string) => state.riders.find((r) => r.id === id)?.name.split(' ')[0] ?? '?';
+  return (
+    <div class="premies">
+      {state.premies.map((p) => (
+        <div class={`premie ${p.hits.length >= PREMIE_POINTS.length ? 'closed' : ''}`} key={p.id}>
+          <span class="pn ty">⚑ {PREMIE_INFO[p.id].label}</span>
+          <span class="pp">
+            tegel {p.pos} · {PREMIE_POINTS.join('-')} punten
+          </span>
+          {p.hits.length > 0 && (
+            <span class="ph">
+              {p.hits.map((h, i) => `${i + 1}. ${nameOf(h.riderId)}`).join('  ')}
+            </span>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -236,8 +313,12 @@ function EventCard({ state }: { state: PublicState }) {
       <div class="tag ty">{def.silly ? 'NIEUWS' : 'OMSTANDIGHEDEN'}</div>
       <div class="title ty">{def.title}</div>
       <p>{def.blurb}</p>
+      <p class={`weather ${state.weather}`}>
+        {WEATHER[state.weather].icon} {WEATHER[state.weather].label}
+      </p>
       {rider && <p class="target">Doelwit: {rider.name}</p>}
       {team && <p class="target">Doelwit: team van {team.name}</p>}
+      <PremieList state={state} />
     </div>
   );
 }
@@ -252,9 +333,54 @@ function EnergyBar({ value, max }: { value: number; max: number }) {
   );
 }
 
+/** De koers renner voor renner: plek, tegel en hoe ver ze van de kop en van elkaar liggen. */
+function Ladder({ snap }: { snap: Snapshot }) {
+  const { state } = snap;
+  const rows = standing(state);
+  const kopmen = new Set(Object.values(state.kopman));
+  const lead = rows[0]?.tile ?? 0;
+  const span = Math.max(1, rows[rows.length - 1] ? lead - rows[rows.length - 1].tile : 1);
+  return (
+    <div class={`standings ladder frame ${rows.length > 9 ? 'dense' : ''}`} style={{ '--n': rows.length }}>
+      <div class="tag ty">
+        KOERS · {rows.length} RENNERS · TEGEL {lead} VAN {state.trackLength}
+      </div>
+      {rows.map((row, i) => {
+        const team = teamById(state, row.teamId);
+        const col = colorOf(team);
+        const tied = i > 0 && row.gapAhead === 0;
+        const r = row.rider;
+        return (
+          <div key={r.id}>
+            {i > 0 && row.gapAhead > 0 && (
+              <div class="gap" style={{ '--g': Math.min(row.gapAhead, 6) }}>
+                <span>{rows.length > 9 && row.gapAhead < 2 ? '' : tiles(row.gapAhead)}</span>
+              </div>
+            )}
+            <div class={`lrow ${row.rank === 1 ? 'first' : ''} ${tied ? 'tied' : ''}`}>
+              <span class="rk ty">{tied ? '' : row.rank}</span>
+              <span class="chip" style={{ background: col.hex }} />
+              <span class="nm">
+                {kopmen.has(r.id) && <span class="star">★</span>}
+                {r.name.split(' ')[0]} <i class="tm">{team.name}</i>
+              </span>
+              <span class="bar">
+                <span class="dotp" style={{ left: `${span > 0 ? (1 - row.gapLeader / span) * 100 : 100}%`, background: col.hex }} />
+              </span>
+              <span class="tl ty">{row.tile}</span>
+              <span class={`gl ty ${row.gapLeader === 0 ? 'ok' : ''}`}>{row.gapLeader === 0 ? 'KOP' : `−${row.gapLeader}`}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function Standings({ snap }: { snap: Snapshot }) {
   const { state } = snap;
   const racing = state.phase === 'race' || state.phase === 'resolve' || state.phase === 'results';
+  if (racing) return <Ladder snap={snap} />;
   const rows = state.teams
     .map((t) => ({ t, best: Math.max(0, ...ridersOf(state, t.id).map((r) => r.pos)) }))
     .sort((a, b) => (racing ? b.best - a.best : b.t.points - a.t.points));
@@ -282,6 +408,7 @@ function Standings({ snap }: { snap: Snapshot }) {
                 <div class="riders">
                   {ridersOf(state, t.id).map((r) => (
                     <span key={r.id} class="rr" title={QUIRKS[r.quirk].label}>
+                      {state.kopman[t.id] === r.id && <span class="star">★</span>}
                       {r.name.split(' ')[0]} <i>{Math.floor(r.pos)}</i>
                       <EnergyBar value={r.energy} max={r.maxEnergy} />
                     </span>
@@ -307,31 +434,51 @@ function Standings({ snap }: { snap: Snapshot }) {
 function Minimap({ state }: { state: PublicState }) {
   const n = state.trackLength;
   const racing = state.phase === 'race' || state.phase === 'resolve' || state.phase === 'results';
+  const rows = racing ? standing(state) : [];
+  // Renners op dezelfde tegel krijgen een eigen rij, zodat niemand achter een ander verdwijnt.
+  const stack = new Map<number, number>();
   return (
-    <svg class="minimap frame" viewBox={`0 0 ${n} 6`} preserveAspectRatio="none">
-      {state.terrain.map((t, i) => (
-        <rect key={i} x={i} y="3" width="1.02" height="3" fill={terrainColor(t)} />
-      ))}
-      {racing &&
-        state.riders.map((r) => (
-          <rect
-            key={r.id}
-            x={Math.min(n - 0.4, r.pos) - 0.2}
-            y="0.4"
-            width="0.5"
-            height="2.4"
-            rx="0.25"
-            fill={colorOf(teamById(state, r.teamId)).hex}
-          />
+    <div class="minimap frame">
+      <svg viewBox={`0 0 ${n} 12`} preserveAspectRatio="none">
+        {state.terrain.map((t, i) => (
+          <rect key={i} x={i} y="8" width="1.02" height="4" fill={terrainColor(t)} />
         ))}
-    </svg>
+        {state.premies.map((p) => (
+          <rect key={p.id} x={p.pos - 0.3} y="0" width="0.6" height="12" fill="#ffc83d" />
+        ))}
+      </svg>
+      {rows.map((row) => {
+        const k = stack.get(row.tile) ?? 0;
+        stack.set(row.tile, k + 1);
+        const col = colorOf(teamById(state, row.teamId));
+        const left = Math.min(n, Math.max(0, row.rider.pos)) / n;
+        return (
+          <span
+            key={row.rider.id}
+            class={`mm-dot ${row.rank === 1 ? 'first' : ''}`}
+            style={{ left: `${left * 100}%`, top: `${Math.min(k, 3) * 4}px`, background: col.hex }}
+            title={`${row.rank}. ${row.rider.name}`}
+          />
+        );
+      })}
+    </div>
   );
 }
 
-function Booth({ caption, audioOn, onEnable }: { caption: Caption | null; audioOn: boolean; onEnable: () => void }) {
-  const who: CommentatorId[] = ['johan', 'marieke'];
+function Booth({
+  caption,
+  audioOn,
+  tutorial,
+  onEnable,
+}: {
+  caption: Caption | null;
+  audioOn: boolean;
+  tutorial: boolean;
+  onEnable: () => void;
+}) {
+  const who: CommentatorId[] = tutorial ? ['johan', 'marieke', 'fenna'] : ['johan', 'marieke'];
   return (
-    <footer class="booth frame">
+    <footer class="booth frame" style={{ '--mics': who.length }}>
       {who.map((id) => {
         const speaking = caption?.speaker === id;
         return (
@@ -363,19 +510,6 @@ function Booth({ caption, audioOn, onEnable }: { caption: Caption | null; audioO
 }
 
 // ---- Kaarten en teambord -------------------------------------------------------
-
-function CardTile({ def, big }: { def: string; big?: boolean }) {
-  const d = CARD_DEFS[def];
-  if (!d) return null;
-  return (
-    <div class={`ctile ${big ? 'big' : ''}`} style={{ '--k': KIND_COLORS[d.kind] } as Record<string, string>}>
-      <div class="ck ty">{KIND_LABELS[d.kind]}</div>
-      <div class="cn">{d.name}</div>
-      <div class="ct">{d.text}</div>
-      <div class="cp ty">€ {d.price}</div>
-    </div>
-  );
-}
 
 function StatBars({ rider, tolerance }: { rider: Rider; tolerance: number }) {
   const eff = effectiveStats(rider, tolerance);
@@ -409,6 +543,116 @@ function Fatigue({ value, tolerance }: { value: number; tolerance: number }) {
         <i key={i} class={i < value ? (i >= limit ? 'on over' : 'on') : ''} />
       ))}
     </span>
+  );
+}
+
+function NamingPanel({ snap }: { snap: Snapshot }) {
+  const { state } = snap;
+  const done = state.teams.filter((t) => t.ready || t.isBot).length;
+  return (
+    <div class="panel frame">
+      <div class="ph-head">
+        <div>
+          <div class="kicker ty">NAMEN: GEEF JE RENNERS EEN NAAM</div>
+          <div class="big-line ty">
+            {done}/{state.teams.length} teams klaar. Geen timer, de draft begint zodra iedereen klaar is.
+          </div>
+        </div>
+      </div>
+      <TutorialCard state={state} inline />
+      <div class="boards">
+        {state.teams.map((t) => {
+          const col = colorOf(t);
+          const ready = t.ready || t.isBot;
+          return (
+            <div class={`board ${ready ? 'ready' : ''}`} key={t.id} style={{ borderColor: col.hex }}>
+              <div class="bh">
+                <span class="chip" style={{ background: col.hex }} />
+                <b>{t.name}</b>
+                {t.isBot && <span class="bot"> bot</span>}
+                <span class={`rd ty ${ready ? 'ok' : ''}`}>{ready ? 'KLAAR' : 'BEZIG'}</span>
+              </div>
+              {ridersOf(state, t.id).map((r) => (
+                <div class="br" key={r.id}>
+                  <div class="rn">
+                    {r.name} <i>{RIDER_TYPES[r.type].label}</i>
+                  </div>
+                  <div class="dim">{QUIRKS[r.quirk].label}</div>
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function RecruitPanel({ snap }: { snap: Snapshot }) {
+  const { state } = snap;
+  const rc = state.recruit!;
+  const current = rc.currentTeamId ? teamById(state, rc.currentTeamId) : null;
+  return (
+    <div class="panel frame">
+      <div class="ph-head">
+        <div>
+          <div class="kicker ty">REKRUTEREN: KIES JE RENNERS</div>
+          <div class="big-line ty">
+            {current ? (
+              <>
+                <span class="chip" style={{ background: colorOf(current).hex }} /> {current.name} is aan de beurt
+              </>
+            ) : (
+              'De ploegen zijn compleet'
+            )}
+          </div>
+        </div>
+        <div class="order">
+          {rc.order.map((id, i) => {
+            const t = teamById(state, id);
+            return (
+              <span
+                key={i}
+                class={`ord ${i === rc.idx ? 'now' : i < rc.idx ? 'done' : ''}`}
+                style={{ background: colorOf(t).hex }}
+                title={t.name}
+              >
+                {t.name.slice(0, 1).toUpperCase()}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+      <TutorialCard state={state} inline />
+      <div class="recruit-teams">
+        {state.teams.map((t) => (
+          <span class="rt" key={t.id} style={{ borderColor: colorOf(t).hex }}>
+            <b>{t.name}</b> € {t.coins}
+            {ridersOf(state, t.id).map((r) => (
+              <i key={r.id}>
+                {r.name.split(' ')[0]} · {RIDER_TYPES[r.type].label}
+              </i>
+            ))}
+          </span>
+        ))}
+      </div>
+      <div class="kicker ty">DE POOL: ELKE RENNER KAN MAAR ÉÉN KEER WORDEN GEKOZEN</div>
+      <div class="cands-tv">
+        {rc.market.map((c) => (
+          <div class={`cand-tv ${c.price === 0 ? 'free' : ''}`} key={c.rider.id}>
+            <div class="ct-top">
+              <b>{c.rider.name}</b>
+              <span class="price ty">{c.price === 0 ? 'GRATIS' : `€ ${c.price}`}</span>
+            </div>
+            <div class="dim">
+              {RIDER_TYPES[c.rider.type].label} · {QUIRKS[c.rider.quirk].label}
+            </div>
+            <StatBars rider={c.rider} tolerance={0} />
+          </div>
+        ))}
+      </div>
+      <p class="hint">Je kiest er drie, om de beurt. Neo-profs zijn gratis, sterren kosten munten die je ook voor kaarten nodig hebt.</p>
+    </div>
   );
 }
 
@@ -448,11 +692,16 @@ function DraftPanel({ snap }: { snap: Snapshot }) {
         </div>
       </div>
       <TutorialCard state={state} inline />
+      <p class="profile-line">
+        <b>{stageProfile(state).stageName}</b> · {stageProfile(state).summary}
+        {state.premies.length > 0 && ` · premies: ${stageProfile(state).premies.toLowerCase()}`}
+      </p>
       <div class="kicker ty">DE MARKT ({state.deckCount} kaarten op de stapel)</div>
       <div class="market">
         {state.market.map((def, i) => (
-          <CardTile key={i} def={def} big />
+          <PlayingCard key={i} def={def} price index={i} fan />
         ))}
+        <CardBack count={state.deckCount} index={state.market.length} />
       </div>
       <p class="hint">
         Pak een kaart van de markt, of een onbekende van de stapel. Het team onderaan het klassement begint.
@@ -468,7 +717,11 @@ function TeamPanel({ snap }: { snap: Snapshot }) {
       <div class="ph-head">
         <div>
           <div class="kicker ty">VOORBEREIDING: ETAPPE {state.stage}</div>
-          <div class="big-line ty">Train je renners, bouw je team uit en ruil met de rest</div>
+          <div class="big-line ty">Kies je kopman, train je renners en bouw je team uit</div>
+          <p class="profile-line">
+            {stageProfile(state).summary}
+            {state.premies.length > 0 && ` · premies: ${stageProfile(state).premies.toLowerCase()}`}
+          </p>
         </div>
       </div>
       <TutorialCard state={state} inline />
@@ -490,6 +743,7 @@ function TeamPanel({ snap }: { snap: Snapshot }) {
                 <div class="br" key={r.id}>
                   <div class="rn">
                     {r.name} <i>{RIDER_TYPES[r.type].label}</i>
+                    {r.injury > 0 && <i class="injury"> geblesseerd</i>}
                     <Fatigue value={r.fatigue} tolerance={tol} />
                   </div>
                   <StatBars rider={r} tolerance={tol} />
@@ -560,9 +814,68 @@ function Lobby({ snap }: { snap: Snapshot }) {
                 ? `${president.name} is de president: druk op Start op je telefoon als iedereen er is.`
                 : 'Wachten op de president.'}
           </p>
+          <p class="hint">Na de start volgt eerst een korte uitleg van het spel, zonder timer.</p>
           <p class={`tutstate ${state.tutorial ? 'on' : ''}`}>
-            Tutorial: <b>{state.tutorial ? 'aan' : 'uit'}</b>. De commentatoren leggen {state.tutorial ? 'het spel uit terwijl jullie spelen' : 'niets extra uit'}.
+            Tips tijdens het spel: <b>{state.tutorial ? 'aan' : 'uit'}</b>. {state.tutorial ? 'Kaartjes en Fenna herinneren je aan wat nu kan.' : 'Alleen de uitleg vooraf.'} Commentaar: <b>{state.commentary ? 'aan' : 'uit'}</b>.
           </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Briefing({ snap }: { snap: Snapshot }) {
+  const { state } = snap;
+  const b = state.briefing;
+  if (!b) return null;
+  const page = BRIEFING[Math.min(b.page, BRIEFING.length - 1)];
+  const okCount = state.teams.filter((t) => b.ok[t.id]).length;
+  const president = state.teams.find((t) => t.id === snap.presidentTeamId);
+  const last = b.page >= BRIEFING.length - 1;
+  return (
+    <div class="overlay">
+      <div class="brief-tv frame">
+        <div class="bt-top">
+          <span class="ty kicker">
+            DE SPELREGELS · {b.page + 1} VAN {BRIEFING.length}
+          </span>
+          <span class="dots">
+            {BRIEFING.map((_, i) => (
+              <i key={i} class={i === b.page ? 'on' : i < b.page ? 'done' : ''} />
+            ))}
+          </span>
+        </div>
+        <h1 class="ty">{page.title}</h1>
+        <p class="lead">{page.lead}</p>
+        <div class="bt-points">
+          {page.points.map((p, i) => (
+            <div class="bt-point" key={p.head}>
+              <span class="n ty">{i + 1}</span>
+              <div>
+                <div class="ty h">{p.head}</div>
+                <div class="t">{p.text}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div class="bt-foot">
+          <span class="okline">
+            {last ? (
+              <>
+                <b>{okCount}</b> van {state.teams.length} snappen het.
+                {state.teams.filter((t) => !b.ok[t.id]).length > 0 &&
+                  ` Nog: ${state.teams
+                    .filter((t) => !b.ok[t.id])
+                    .map((t) => t.name)
+                    .join(', ')}.`}
+              </>
+            ) : (
+              <>Geen timer. Vraag het gerust als iets niet duidelijk is.</>
+            )}
+          </span>
+          <span class="dim">
+            {president ? `${president.name} bladert door op de telefoon.` : 'De president bladert door op de telefoon.'}
+          </span>
         </div>
       </div>
     </div>
@@ -591,10 +904,16 @@ function Results({ snap }: { snap: Snapshot }) {
                 <div class="pts ty">
                   +{t.stagePoints} punten <span class="dim">({t.totalPoints} totaal)</span>
                 </div>
+                {t.premiePoints > 0 && (
+                  <div class="dim s">
+                    eindstand {t.riderPoints} · premies {t.premiePoints}
+                  </div>
+                )}
                 <div class="rs">
                   {ridersOf(state, team.id).map((r) => (
                     <span key={r.id}>
-                      #{rankOf.get(r.id)} {r.name}
+                      #{rankOf.get(r.id)} {t.kopmanId === r.id ? '★ ' : ''}
+                      {r.name}
                     </span>
                   ))}
                 </div>
@@ -626,7 +945,7 @@ function Results({ snap }: { snap: Snapshot }) {
           </div>
         )}
         <p class="hint">
-          Training vervaagt nu met 1 per eigenschap. Volgende etappe begint zo vanzelf, of de president drukt op Verder.
+          ★ = kopman: zijn punten tellen dubbel. Training vervaagt nu met 1 per eigenschap. De volgende etappe begint zo vanzelf.
         </p>
       </div>
     </div>

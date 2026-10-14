@@ -7,7 +7,11 @@ import {
   eventLines,
   finishLines,
   introLines,
+  kopmanLines,
+  namingLines,
   pickLines,
+  recruitIntroLines,
+  recruitLines,
   roundLines,
   stageLines,
   stageResultLines,
@@ -17,7 +21,8 @@ import {
 import type { Line, TutorialTopic } from '../shared/commentary';
 import {
   botDraft,
-  botEfforts,
+  botRacePlan,
+  botRecruit,
   botStep,
   createGame,
   reduce,
@@ -26,13 +31,15 @@ import {
   toPublic,
 } from '../shared/engine';
 import type { ClientMsg, FeedBatch, PlayerAction, PresidentAction, RoomInfo, ServerMsg } from '../shared/protocol';
+import { BRIEFING } from '../shared/content';
 import type { Action, GameState } from '../shared/types';
 import { warm } from './tts';
 
 export const TIMING = {
+  recruitMs: 25_000,
   draftMs: 20_000,
   teamMs: 90_000,
-  raceMs: 25_000,
+  raceMs: 30_000, // naast het tempo kies je ook volgauto en kaarten
   resolveMs: 7_000,
   resultsMs: 35_000,
   tutorialFactor: 1.6, // meer tijd als de commentatoren uitleg geven
@@ -90,9 +97,11 @@ export class Room {
     }
   }
 
-  private say(lines: Line[]): void {
+  private say(all: Line[], interrupt = false): void {
+    // Met commentaar uit blijft alleen Fenna (de tutorial-uitleg) over.
+    const lines = this.state.commentary ? all : all.filter((l) => l.speaker === 'fenna');
     if (lines.length === 0) return;
-    this.feed.push({ id: ++this.feedSeq, lines });
+    this.feed.push({ id: ++this.feedSeq, lines, ...(interrupt ? { interrupt } : {}) });
     if (this.feed.length > FEED_KEEP) this.feed.shift();
     for (const l of lines) warm(l.speaker, l.text);
   }
@@ -161,10 +170,21 @@ export class Room {
         return this.dispatch({ type: 'removeBot' });
       case 'nextStage':
         return this.dispatch({ type: 'nextStage' });
+      case 'briefNext':
+      case 'briefBack': {
+        const page = this.state.briefing?.page ?? 0;
+        return this.dispatch({ type: 'briefPage', page: page + (what === 'briefNext' ? 1 : -1) });
+      }
+      case 'briefDone':
+        return this.dispatch({ type: 'briefDone' });
       case 'tutorialOn':
         return this.dispatch({ type: 'setTutorial', on: true });
       case 'tutorialOff':
         return this.dispatch({ type: 'setTutorial', on: false });
+      case 'commentaryOn':
+        return this.dispatch({ type: 'setCommentary', on: true });
+      case 'commentaryOff':
+        return this.dispatch({ type: 'setCommentary', on: false });
       case 'addBot':
         return this.dispatch({
           type: 'join',
@@ -181,14 +201,22 @@ export class Room {
     const s = this.state;
 
     if (action.type === 'draftPick') this.commentPick(prev, action.teamId, action.source);
+    if (action.type === 'recruit') this.commentRecruit(prev, action.teamId, action.index);
+    // Bij het bladeren door de uitleg leest een commentator de samenvatting van de nieuwe pagina voor.
+    if (action.type === 'briefPage' && s.briefing && s.briefing.page !== prev.briefing?.page) {
+      const say = BRIEFING[s.briefing.page]?.say;
+      if (say) this.say([say], true);
+    }
     if (action.type === 'setTutorial' || action.type === 'rematch') this.explained.clear();
 
     const draftTurn = (x: GameState) => (x.phase === 'draft' && x.draft ? x.draft.idx : -1);
+    const recruitTurn = (x: GameState) => (x.phase === 'recruit' && x.recruit ? x.recruit.idx : -1);
     const changed =
       prev.phase !== s.phase ||
       prev.round !== s.round ||
       prev.stage !== s.stage ||
-      draftTurn(prev) !== draftTurn(s);
+      draftTurn(prev) !== draftTurn(s) ||
+      recruitTurn(prev) !== recruitTurn(s);
     if (changed) this.onEnter(prev);
     this.broadcast();
   }
@@ -199,6 +227,13 @@ export class Room {
     const def =
       source.kind === 'market' ? prev.market[source.index]?.def : team.hand[team.hand.length - 1]?.def;
     if (def) this.say(pickLines(team.name, def));
+  }
+
+  private commentRecruit(prev: GameState, teamId: string, index: number): void {
+    const team = this.state.teams.find((t) => t.id === teamId);
+    const cand = prev.recruit?.market[index];
+    if (!team || !cand) return;
+    this.say(recruitLines(team.name, cand.rider, cand.price));
   }
 
   private clearTimers(): void {
@@ -230,15 +265,32 @@ export class Room {
     const s = this.state;
     const pub = toPublic(s);
     switch (s.phase) {
+      case 'briefing': {
+        // Geen timer: de president bladert door de uitleg, iedereen leest mee.
+        this.phaseEndsAt = null;
+        this.say([BRIEFING[0].say], true);
+        break;
+      }
+      case 'recruit': {
+        const first = s.recruit?.idx === 0;
+        if (first) this.say([...recruitIntroLines(pub), ...this.explain('recruit')]);
+        this.setPhaseTimer(this.scaled(TIMING.recruitMs), { type: 'timeout' });
+        this.scheduleBotRecruit();
+        this.nudgeRecruitTurn();
+        break;
+      }
+      case 'naming': {
+        // Geen timer: iedereen geeft zijn renners een naam en drukt op klaar.
+        this.phaseEndsAt = null;
+        this.say(namingLines(pub));
+        break;
+      }
       case 'draft': {
         const first = s.draft?.idx === 0;
         if (first) {
           const lines: Line[] = [];
-          if (prev.phase === 'lobby') {
-            lines.push(...introLines(pub));
-            lines.push(...this.explain('intro'));
-            lines.push(...this.explain('season'));
-          } else lines.push(...this.explain('fade'));
+          if (prev.phase === 'briefing') lines.push(...introLines(pub));
+          else lines.push(...this.explain('fade'));
           lines.push(...stageLines(pub));
           lines.push(...this.explain('draft'));
           this.say(lines);
@@ -260,7 +312,13 @@ export class Room {
         break;
       }
       case 'race': {
-        this.say([...eventLines(pub), ...this.explain('race')]);
+        this.say([
+          ...(s.round === 1 ? kopmanLines(pub) : []),
+          ...eventLines(pub),
+          ...this.explain('race'),
+          // De uitleg over gel, volgauto en blokkades komt een ronde later, zodat het niet te veel tegelijk is.
+          ...(s.round >= 2 ? this.explain('items') : []),
+        ]);
         this.setPhaseTimer(this.scaled(TIMING.raceMs), { type: 'timeout' });
         this.scheduleBotEfforts();
         break;
@@ -295,11 +353,36 @@ export class Room {
     const team = this.state.teams.find((t) => t.id === id);
     if (!team || team.isBot) return;
     this.say([
-      { speaker: 'johan', text: `${team.name}, jij bent aan de beurt. Pak een kaart op je telefoon.` },
+      { speaker: 'fenna', text: `${team.name}, jij bent aan de beurt. Pak een kaart op je telefoon.` },
     ]);
   }
 
+  /** Met tutorial aan: zeg wie er aan de beurt is om te rekruteren. */
+  private nudgeRecruitTurn(): void {
+    if (!this.state.tutorial) return;
+    const id = this.state.recruit ? this.state.recruit.order[this.state.recruit.idx] : null;
+    const team = this.state.teams.find((t) => t.id === id);
+    if (!team || team.isBot) return;
+    this.say([{ speaker: 'fenna', text: `${team.name}, jij bent aan de beurt. Kies een renner op je telefoon.` }]);
+  }
+
   // ---- Bots ----
+
+  private scheduleBotRecruit(): void {
+    const s = this.state;
+    const teamId = s.recruit ? s.recruit.order[s.recruit.idx] : null;
+    const team = s.teams.find((t) => t.id === teamId);
+    if (!team?.isBot) return;
+    this.after(
+      1400 + Math.random() * 2000,
+      () => {
+        const r = this.state.recruit;
+        if (this.state.phase !== 'recruit' || !r || r.order[r.idx] !== team.id) return;
+        this.dispatch({ type: 'recruit', teamId: team.id, index: botRecruit(this.state, team.id, Math.random) });
+      },
+      true,
+    );
+  }
 
   private scheduleBotDraft(): void {
     const s = this.state;
@@ -341,7 +424,7 @@ export class Room {
         2500 + Math.random() * 6000,
         () => {
           if (this.state.phase !== 'race' || this.state.round !== round) return;
-          this.dispatch({ type: 'effort', teamId: t.id, efforts: botEfforts(this.state, t.id, Math.random) });
+          this.dispatch({ type: 'effort', teamId: t.id, ...botRacePlan(this.state, t.id, Math.random) });
         },
         true,
       );

@@ -2,6 +2,7 @@
 // (edge-tts on the server), and falls back to browser speech or silent captions.
 
 import type { Line } from '../../shared/commentary';
+import { COMMENTATORS } from '../../shared/content';
 import type { CommentatorId } from '../../shared/content';
 
 export interface Caption {
@@ -26,6 +27,7 @@ export class Broadcaster {
   constructor(
     private onCaption: (c: Caption | null) => void,
     private onUnlocked: () => void,
+    private onSpeaking: (talking: boolean) => void = () => {},
   ) {}
 
   /** Browsers only allow audio after a gesture; call this from a click or keypress. */
@@ -48,7 +50,7 @@ export class Broadcaster {
       this.queue.push({ line, blob: this.fetchBlob(line) });
     }
     // Stay close to the action: never fall more than a few lines behind.
-    while (this.queue.length > 5) this.queue.shift();
+    while (this.queue.length > 4) this.queue.shift();
     void this.run();
   }
 
@@ -60,7 +62,9 @@ export class Broadcaster {
 
   private async fetchBlob(line: Line): Promise<Blob | null> {
     try {
-      const url = `/api/tts?v=${line.speaker}&t=${encodeURIComponent(line.text)}`;
+      // De stem zit in de URL: anders serveert de browsercache oude audio na een stemwissel.
+      const voice = encodeURIComponent(COMMENTATORS[line.speaker].voice);
+      const url = `/api/tts?v=${line.speaker}&voice=${voice}&t=${encodeURIComponent(line.text)}`;
       const res = await fetch(url);
       if (!res.ok) return null;
       return await res.blob();
@@ -72,6 +76,7 @@ export class Broadcaster {
   private async run(): Promise<void> {
     if (this.running) return;
     this.running = true;
+    this.onSpeaking(true);
     try {
       while (this.queue.length > 0) {
         const item = this.queue.shift()!;
@@ -83,6 +88,7 @@ export class Broadcaster {
       if (this.queue.length === 0) this.onCaption(null);
     } finally {
       this.running = false;
+      this.onSpeaking(false);
     }
   }
 
@@ -115,9 +121,9 @@ export class Broadcaster {
     if (!synth) return sleep(readingTime(line.text));
     return new Promise<void>((resolve) => {
       const u = new SpeechSynthesisUtterance(line.text);
-      u.lang = 'en-GB';
+      u.lang = line.speaker === 'fenna' ? 'nl-NL' : 'nl-BE';
       u.rate = 1.05;
-      u.pitch = line.speaker === 'marieke' ? 1.15 : 0.9;
+      u.pitch = line.speaker === 'johan' ? 0.9 : 1.15;
       u.onend = () => resolve();
       u.onerror = () => resolve();
       synth.speak(u);

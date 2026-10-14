@@ -2,37 +2,82 @@ import { createContext, render } from 'preact';
 import { createPortal } from 'preact/compat';
 import { useContext, useEffect, useRef, useState } from 'preact/hooks';
 import '../common/theme.css';
+import { CardDetail, PlayingCard } from '../common/card';
 import './play.css';
+import { installClickSounds, useCues } from './cues';
 import {
+  BRIEFING,
   CARD_DEFS,
   CARD_DEF_LIST,
   EFFORTS,
   EVENTS,
   KIND_COLORS,
   KIND_LABELS,
+  PACE_ORDER,
+  PREMIE_INFO,
   QUIRKS,
   RIDER_TYPES,
   STAT_HELP,
   STAT_LABELS,
   TEAM_COLORS,
   TERRAINS,
+  WEATHER,
 } from '../../shared/content';
 import {
   allesCost,
   baseParts,
+  canBlock,
+  canHelp,
   effectiveStats,
+  groupsOf,
   maxEnergyFor,
   perksOf,
   resolveEffort,
+  stageFit,
   sumParts,
   teamDefIds,
   terrainAt,
 } from '../../shared/engine';
+import { stageProfile } from '../../shared/profile';
+import { standing, tiles } from '../../shared/standing';
+import type { StandingRow } from '../../shared/standing';
 import type { PlayerAction, PresidentAction, RoomInfo, ServerMsg } from '../../shared/protocol';
 import { phoneHint } from '../../shared/tutorial';
 import type { Hint, HintContext } from '../../shared/tutorial';
-import { BLIND_COST, SLOT_LIMITS, STAGES, TRAININGS_PER_RIDER } from '../../shared/types';
-import type { Card, Effort, OfferView, PlayerView, PublicState, Rider, SlotKind, Stat } from '../../shared/types';
+import {
+  BLIND_COST,
+  BLOCK_PENALTY,
+  BLOCK_RANGE,
+  CAR_ENERGY,
+  CAR_ENERGY_UPGRADED,
+  COLA_BONUS,
+  ALONE_COST,
+  GEL_ENERGY,
+  HELP_BONUS,
+  HELP_RANGE,
+  PELOTON_MIN,
+  PELOTON_REST,
+  PREMIE_POINTS,
+  RECRUIT_PICKS,
+  TEAM_BONUS,
+  TEAM_BONUS_MAX,
+  SLOT_LIMITS,
+  STAGES,
+  TRAININGS_PER_RIDER,
+} from '../../shared/types';
+import type {
+  Card,
+  Effort,
+  OfferView,
+  PlayerView,
+  PublicState,
+  RaceItem,
+  RacePlay,
+  Rider,
+  SlotKind,
+  Stat,
+  Terrain,
+} from '../../shared/types';
 import { openSocket } from '../common/ws';
 import type { Socket } from '../common/ws';
 
@@ -191,26 +236,14 @@ function CardRow({
   def,
   price,
   children,
-  dim,
 }: {
   def: string;
   price?: boolean;
   children?: preact.ComponentChildren;
   dim?: boolean;
 }) {
-  const d = CARD_DEFS[def];
-  if (!d) return null;
-  return (
-    <div class={`pcard ${dim ? 'dim' : ''}`} style={{ '--k': KIND_COLORS[d.kind] } as Record<string, string>}>
-      <div class="pc-top">
-        <span class="pc-kind ty">{KIND_LABELS[d.kind]}</span>
-        {price && <span class="pc-price ty">€ {d.price}</span>}
-      </div>
-      <div class="pc-name">{d.name}</div>
-      <div class="pc-text">{d.text}</div>
-      {children && <div class="pc-actions">{children}</div>}
-    </div>
-  );
+  if (!CARD_DEFS[def]) return null;
+  return <CardDetail def={def} price={price}>{children}</CardDetail>;
 }
 
 function Bars({ rider, tolerance }: { rider: Rider; tolerance: number }) {
@@ -391,6 +424,7 @@ function Game({
   leave,
 }: GameProps & { error: string | null; online: boolean; clock: () => number; leave: () => void }) {
   useNow(500);
+  useCues(view, error);
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   const { state, me, teamId } = view;
   const team = state.teams.find((t) => t.id === teamId);
@@ -410,6 +444,9 @@ function Game({
 
   const title: Record<string, string> = {
     lobby: 'Lobby',
+    briefing: 'Uitleg',
+    recruit: 'Rekruteren',
+    naming: 'Namen',
     draft: 'Draft',
     team: 'Voorbereiding',
     race: `Ronde ${state.round}`,
@@ -417,7 +454,8 @@ function Game({
     results: 'Uitslag',
     finished: 'Eindstand',
   };
-  const stageTag = state.phase === 'lobby' || state.phase === 'finished' ? '' : `E${state.stage}/${STAGES} · `;
+  const stageTag =
+    state.phase === 'lobby' || state.phase === 'briefing' || state.phase === 'finished' ? '' : `E${state.stage}/${STAGES} · `;
 
   return (
     <div class="game" style={{ '--team': col.hex } as Record<string, string>}>
@@ -437,6 +475,9 @@ function Game({
       <HintSlot.Provider value={slot}>
         <main key={state.phase}>
           {state.phase === 'lobby' && <Lobby view={view} act={act} president={president} />}
+          {state.phase === 'briefing' && <Briefing view={view} act={act} president={president} />}
+          {state.phase === 'recruit' && <Recruit view={view} act={act} />}
+          {state.phase === 'naming' && <Naming view={view} act={act} />}
           {state.phase === 'draft' && <Draft view={view} act={act} />}
           {state.phase === 'team' && <TeamPhase view={view} act={act} />}
           {state.phase === 'race' && <Race view={view} act={act} />}
@@ -449,19 +490,9 @@ function Game({
   );
 }
 
-/** Kaart als compacte tegel of rij; de details en acties staan in een sheet. */
-function CardTile({ def, price, dim, onClick }: { def: string; price?: boolean; dim?: boolean; onClick: () => void }) {
-  const d = CARD_DEFS[def];
-  if (!d) return null;
-  return (
-    <button class={`ctile ${dim ? 'dim' : ''}`} style={{ '--k': KIND_COLORS[d.kind] } as Record<string, string>} onClick={onClick}>
-      <span class="ct-main">
-        <span class="ct-kind ty">{KIND_LABELS[d.kind]}</span>
-        <span class="ct-name">{d.name}</span>
-      </span>
-      {price && <span class="ct-price ty">€ {d.price}</span>}
-    </button>
-  );
+/** Kaart als compacte speelkaart; de regels en acties staan in een sheet. */
+function CardTile({ def, price, dim, index, onClick }: { def: string; price?: boolean; dim?: boolean; index?: number; onClick: () => void }) {
+  return <PlayingCard def={def} size="sm" price={price} dim={dim} index={index} onClick={onClick} />;
 }
 
 /** Rijtje strip-knoppen onder de kopbalk: klein label + waarde, opent een sheet. */
@@ -498,6 +529,24 @@ function RiderSheet({ rider, state, onClose, race, perks, bidon }: {
           <div class="small">{q.label}</div>
           <div>{q.blurb}</div>
         </div>
+        {rider.injury > 0 && (
+          <div>
+            <div class="small">Geblesseerd</div>
+            <div>Een val van vorige etappe: -1 op alle eigenschappen. Een fysiotherapeut lost dit sneller op.</div>
+          </div>
+        )}
+        {rider.hurt && (
+          <div>
+            <div class="small">Zwaar gevallen</div>
+            <div>Begint de volgende etappe geblesseerd (-1 op alles), tenzij een fysiotherapeut ingrijpt.</div>
+          </div>
+        )}
+        {state.kopman[rider.teamId] === rider.id && (
+          <div>
+            <div class="small">Kopman</div>
+            <div>Zijn punten voor de eindstand tellen dubbel. Knechten binnen {HELP_RANGE} tegels kunnen helpen.</div>
+          </div>
+        )}
         {race && (
           <div>
             <div class="small">Nu</div>
@@ -523,40 +572,22 @@ function RiderSheet({ rider, state, onClose, race, perks, bidon }: {
 
 // ---- Lobby --------------------------------------------------------------------
 
-function Lobby({ view, act, president }: GameProps) {
+function Lobby({ view, president }: GameProps) {
   const { state, teamId } = view;
   const isPresident = view.presidentTeamId === teamId;
-  const mine = state.riders.filter((r) => r.teamId === teamId);
-  const [names, setNames] = useState(mine.map((r) => r.name));
-  const [info, setInfo] = useState<number | null>(null);
   const hasBot = state.teams.some((t) => t.isBot);
   const enough = state.teams.length >= 2;
-  const r = info !== null ? mine[info] : null;
   return (
     <section class="screen">
       <TutorialHint hint={hintFor(view, {})} />
-      <p class="dim">Geef je drie renners een naam, of houd de willekeurige namen.</p>
       <div class="grow stack">
-        {mine.map((rd, i) => (
-          <div class="rider-edit frame" key={rd.id}>
-            <div class="small">{RIDER_TYPES[rd.type].label}</div>
-            <div class="re-row">
-              <input
-                value={names[i] ?? ''}
-                maxLength={20}
-                onInput={(e) => {
-                  const next = [...names];
-                  next[i] = (e.target as HTMLInputElement).value;
-                  setNames(next);
-                }}
-                onBlur={() => act({ type: 'nameRiders', names })}
-              />
-              <button class="info" onClick={() => setInfo(i)} aria-label={`Over ${names[i] || rd.name}`}>
-                i
-              </button>
-            </div>
-          </div>
-        ))}
+        <div class="frame recruit-note">
+          <div class="ty">JE EIGEN RENNERS</div>
+          <p class="dim">
+            Na de uitleg kiest iedereen om de beurt {RECRUIT_PICKS} renners uit een gedeelde pool: sprinters, klimmers,
+            rouleurs, puncheurs en knechten. Neo-profs zijn gratis, sterren kosten munten.
+          </p>
+        </div>
       </div>
       <div class="dock">
         {isPresident ? (
@@ -569,7 +600,18 @@ function Lobby({ view, act, president }: GameProps) {
               />
               <span>
                 <b>Tutorial-modus</b>
-                <span class="dim s"> · uitleg onderweg</span>
+                <span class="dim s"> · tips tijdens het spel, uitgesproken door Fenna</span>
+              </span>
+            </label>
+            <label class="toggle frame">
+              <input
+                type="checkbox"
+                checked={state.commentary}
+                onChange={(e) => president((e.target as HTMLInputElement).checked ? 'commentaryOn' : 'commentaryOff')}
+              />
+              <span>
+                <b>Commentaar</b>
+                <span class="dim s"> · Johan en Marieke</span>
               </span>
             </label>
             <div class="bots">
@@ -582,7 +624,7 @@ function Lobby({ view, act, president }: GameProps) {
               </button>
             </div>
             <button class="big primary ty" disabled={!enough} onClick={() => president('start')}>
-              {enough ? 'START HET SEIZOEN' : 'VOEG EEN BOT TOE'}
+              {enough ? 'START: EERST DE UITLEG' : 'VOEG EEN BOT TOE'}
             </button>
           </>
         ) : (
@@ -590,6 +632,328 @@ function Lobby({ view, act, president }: GameProps) {
             {state.teams.length} team(s) in het peloton. Wachten tot de president het seizoen start.
           </p>
         )}
+      </div>
+    </section>
+  );
+}
+
+// ---- Uitleg vooraf ------------------------------------------------------------
+
+function Briefing({ view, act, president }: GameProps) {
+  const { state, teamId } = view;
+  const b = state.briefing!;
+  const page = BRIEFING[Math.min(b.page, BRIEFING.length - 1)];
+  const isPresident = view.presidentTeamId === teamId;
+  const last = b.page >= BRIEFING.length - 1;
+  const okCount = state.teams.filter((t) => b.ok[t.id]).length;
+  const mine = !!b.ok[teamId];
+  return (
+    <section class="screen">
+      <div class="brief-top">
+        <span class="small">
+          Uitleg {b.page + 1}/{BRIEFING.length}
+        </span>
+        <span class="dots">
+          {BRIEFING.map((_, i) => (
+            <i key={i} class={i === b.page ? 'on' : i < b.page ? 'done' : ''} />
+          ))}
+        </span>
+      </div>
+      <div class="brief grow">
+        <h2 class="ty">{page.title}</h2>
+        <p class="lead">{page.lead}</p>
+        <div class="bpoints">
+          {page.points.map((p) => (
+            <div class="bp" key={p.head}>
+              <b class="ty">{p.head}</b>
+              <span>{p.text}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div class="dock">
+        {last && (
+          <button class={`big ty ${mine ? '' : 'primary'}`} onClick={() => act({ type: 'briefOk', on: !mine })}>
+            {mine ? `IK SNAP HET ✓ (${okCount}/${state.teams.length})` : `IK SNAP HET (${okCount}/${state.teams.length})`}
+          </button>
+        )}
+        {isPresident ? (
+          <div class="row2">
+            <button class="big slim" disabled={b.page === 0} onClick={() => president('briefBack')}>
+              Terug
+            </button>
+            {last ? (
+              <button class="big slim primary ty" onClick={() => president('briefDone')}>
+                START DE DRAFT
+              </button>
+            ) : (
+              <button class="big slim primary ty" onClick={() => president('briefNext')}>
+                Volgende
+              </button>
+            )}
+          </div>
+        ) : (
+          <p class="dim center s">De president bladert door de uitleg. Kijk mee op de tv.</p>
+        )}
+        {isPresident && !last && (
+          <button class="link-btn" onClick={() => president('briefDone')}>
+            Uitleg overslaan
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ---- Parcours -----------------------------------------------------------------
+
+/** Het parcours als strip: terrein, premievlaggen en (in de race) waar de renners rijden. */
+function Profile({ state, teamId, onClick }: { state: PublicState; teamId?: string; onClick?: () => void }) {
+  const n = Math.max(1, state.trackLength);
+  const pct = (pos: number) => `${Math.min(100, Math.max(0, (pos / n) * 100))}%`;
+  const showRiders = state.phase === 'race' || state.phase === 'resolve';
+  const kopmen = new Set(Object.values(state.kopman));
+  const Tag = onClick ? 'button' : 'div';
+  return (
+    <Tag class="profile" onClick={onClick} aria-label="Parcours">
+      <span class="flags">
+        {onClick && showRiders && <span class="p-hint">Stand ›</span>}
+        {state.premies.map((p) => (
+          <span class={`flag ${p.hits.length >= PREMIE_POINTS.length ? 'closed' : ''}`} key={p.id} style={{ left: pct(p.pos) }}>
+            ⚑ {PREMIE_INFO[p.id].short}
+          </span>
+        ))}
+      </span>
+      <span class="cells">
+        {state.terrain.map((t, i) => (
+          <i class={`pf pf-${t}`} key={i} />
+        ))}
+        {showRiders &&
+          state.riders.map((r) => {
+            const col = TEAM_COLORS[(state.teams.find((t) => t.id === r.teamId)?.color ?? 0) % TEAM_COLORS.length];
+            const mine = r.teamId === teamId;
+            return (
+              <b
+                key={r.id}
+                class={`dot ${mine ? 'mine' : ''} ${kopmen.has(r.id) ? 'kop' : ''}`}
+                style={{ left: pct(Math.min(n, r.pos)), background: col.hex }}
+              />
+            );
+          })}
+      </span>
+      <span class="finish-flag">▮</span>
+    </Tag>
+  );
+}
+
+/** De hele koers op volgorde: wie waar rijdt en hoe ver het tot de kop en tot de renner ervoor is. */
+function Stand({ state, teamId }: { state: PublicState; teamId?: string }) {
+  const rows = standing(state);
+  const kopmen = new Set(Object.values(state.kopman));
+  return (
+    <div class="stand">
+      {rows.map((row, i) => {
+        const team = state.teams.find((t) => t.id === row.teamId);
+        const col = TEAM_COLORS[(team?.color ?? 0) % TEAM_COLORS.length];
+        const tied = i > 0 && row.gapAhead === 0;
+        return (
+          <div key={row.rider.id}>
+            {i > 0 && row.gapAhead > 0 && (
+              <div class="stand-gap" style={{ '--g': Math.min(row.gapAhead, 5) }}>
+                {tiles(row.gapAhead)}
+              </div>
+            )}
+            <div class={`stand-row ${row.teamId === teamId ? 'mine' : ''}`}>
+              <span class="rk ty">{tied ? '' : row.rank}</span>
+              <i class="sw" style={{ background: col.hex }} />
+              <span class="nm">
+                {kopmen.has(row.rider.id) && <span class="star">★ </span>}
+                <b>{firstName(row.rider.name)}</b> <span class="dim">{team?.name}</span>
+              </span>
+              <span class="tl">tegel {row.tile}</span>
+              <span class={`gl ty ${row.gapLeader === 0 ? 'ok' : ''}`}>{row.gapLeader === 0 ? 'KOP' : `−${row.gapLeader}`}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Waar een renner zit ten opzichte van de kop: "aan de kop", "kop, met 2 anderen" of "4 tegels achter de kop". */
+function placeText(row: StandingRow | undefined, state: PublicState): string {
+  if (!row || row.gapLeader > 0) return row ? `${tiles(row.gapLeader)} achter de kop` : '';
+  const same = state.riders.filter((x) => x.id !== row.rider.id && Math.floor(x.pos) === row.tile).length;
+  return same > 0 ? `kop, met ${same} ${same === 1 ? 'ander' : 'anderen'}` : 'aan de kop';
+}
+
+function ProfileLegend({ state }: { state: PublicState }) {
+  const p = stageProfile(state);
+  return (
+    <div class="legend">
+      {(['climb', 'flat', 'cobbles', 'descent'] as Terrain[])
+        .filter((t) => p.counts[t] > 0)
+        .map((t) => (
+          <span key={t}>
+            <i class={`pf pf-${t}`} /> {p.counts[t]} {TERRAINS[t].label.toLowerCase()}
+          </span>
+        ))}
+    </div>
+  );
+}
+
+// ---- Draft --------------------------------------------------------------------
+
+// ---- Rekruteren ---------------------------------------------------------------
+
+function Recruit({ view, act }: ViewProps) {
+  const { state, me, teamId } = view;
+  const rc = state.recruit!;
+  const team = state.teams.find((t) => t.id === teamId)!;
+  const mine = !!me?.pickPending;
+  const current = rc.currentTeamId ? state.teams.find((t) => t.id === rc.currentTeamId) : null;
+  const have = state.riders.filter((r) => r.teamId === teamId);
+  const picksLeft = rc.order.slice(rc.idx).filter((id) => id === teamId).length;
+  // Op id, niet op plek: de markt verschuift zodra iemand anders kiest.
+  const [open, setOpen] = useState<string | null>(null);
+  const cand = open !== null ? rc.market.find((c) => c.rider.id === open) : undefined;
+  const noPerks = perksOf([]);
+  return (
+    <section class="screen">
+      <TutorialHint hint={hintFor(view, { myTurn: mine })} />
+      <div class={`turn frame ${mine ? 'mine' : ''}`}>
+        {mine ? (
+          <>
+            <div class="ty">JIJ BENT AAN DE BEURT</div>
+            <p>Tik op een renner om hem te contracteren. Je hebt € {team.coins}.</p>
+          </>
+        ) : (
+          <>
+            <div class="ty">{current ? `${current.name} KIEST` : 'KLAAR'}</div>
+            <p class="dim">
+              Jij hebt nog {picksLeft} keuze{picksLeft === 1 ? '' : 's'}. Je hebt € {team.coins}.
+            </p>
+          </>
+        )}
+      </div>
+      <div class="small">
+        Jouw ploeg ({have.length}/{RECRUIT_PICKS})
+        {have.length > 0 && ': ' + have.map((r) => `${firstName(r.name)} (${RIDER_TYPES[r.type].label})`).join(', ')}
+      </div>
+      <div class="cands">
+        {rc.market.map((c) => {
+          const r = c.rider;
+          const poor = c.price > team.coins;
+          return (
+            <button class={`cand frame ${poor ? 'poor' : ''}`} key={r.id} onClick={() => setOpen(r.id)}>
+              <span class="cand-top">
+                <b>{r.name}</b>
+                <span class={`price ty ${c.price === 0 ? 'free' : ''}`}>{c.price === 0 ? 'GRATIS' : `€ ${c.price}`}</span>
+              </span>
+              <span class="dim s">
+                {RIDER_TYPES[r.type].label} · {QUIRKS[r.quirk].label}
+              </span>
+              <span class="cand-stats s">
+                {STATS.map((k) => (
+                  <span key={k} title={STAT_HELP[k]}>
+                    {STAT_LABELS[k].slice(0, 3)} <b>{r.base[k]}</b>
+                  </span>
+                ))}
+                <span>
+                  Energie <b>{maxEnergyFor(r, noPerks, false)}</b>
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {cand && (
+        <Sheet title={cand.rider.name} onClose={() => setOpen(null)}>
+          <div class="stack tight">
+            <div>
+              <div class="small">{RIDER_TYPES[cand.rider.type].label}</div>
+              <div>{RIDER_TYPES[cand.rider.type].blurb}</div>
+            </div>
+            <div>
+              <div class="small">{QUIRKS[cand.rider.quirk].label}</div>
+              <div>{QUIRKS[cand.rider.quirk].blurb}</div>
+            </div>
+            <Bars rider={cand.rider} tolerance={0} />
+            <div class="dim s">Energie in de race: {maxEnergyFor(cand.rider, noPerks, false)}</div>
+            {mine ? (
+              <button
+                class="big primary ty"
+                disabled={cand.price > team.coins}
+                onClick={() => {
+                  const index = rc.market.findIndex((c) => c.rider.id === cand.rider.id);
+                  if (index >= 0) act({ type: 'recruit', index });
+                  setOpen(null);
+                }}
+              >
+                {cand.price === 0 ? 'CONTRACTEER (GRATIS)' : `CONTRACTEER VOOR € ${cand.price}`}
+              </button>
+            ) : (
+              <p class="dim s">Wacht op je beurt om te contracteren.</p>
+            )}
+            {mine && cand.price > team.coins && <p class="bad s">Je hebt hier te weinig munten voor.</p>}
+          </div>
+        </Sheet>
+      )}
+    </section>
+  );
+}
+
+function Naming({ view, act }: ViewProps) {
+  const { state, teamId } = view;
+  const team = state.teams.find((t) => t.id === teamId)!;
+  const mine = state.riders.filter((r) => r.teamId === teamId);
+  const [names, setNames] = useState(mine.map((r) => r.name));
+  const [info, setInfo] = useState<number | null>(null);
+  const readyCount = state.teams.filter((t) => t.ready || t.isBot).length;
+  const r = info !== null ? mine[info] : null;
+  const push = (next: string[]) => act({ type: 'nameRiders', names: next });
+  return (
+    <section class="screen">
+      <TutorialHint hint={hintFor(view, {})} />
+      <p class="dim">Geef je renners een naam, of houd de willekeurige namen. Er is geen timer.</p>
+      <div class="grow stack">
+        {mine.map((rd, i) => (
+          <div class="rider-edit frame" key={rd.id}>
+            <div class="small">
+              {RIDER_TYPES[rd.type].label} · {QUIRKS[rd.quirk].label}
+            </div>
+            <div class="re-row">
+              <input
+                value={names[i] ?? ''}
+                maxLength={20}
+                disabled={team.ready}
+                onInput={(e) => {
+                  const next = [...names];
+                  next[i] = (e.target as HTMLInputElement).value;
+                  setNames(next);
+                }}
+                onBlur={() => push(names)}
+              />
+              <button class="info" onClick={() => setInfo(i)} aria-label={`Over ${names[i] || rd.name}`}>
+                i
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div class="dock">
+        <button
+          class={`big ty ${team.ready ? '' : 'primary'}`}
+          onClick={() => {
+            if (team.ready) act({ type: 'unready' });
+            else {
+              push(names);
+              act({ type: 'ready' });
+            }
+          }}
+        >
+          {team.ready ? `KLAAR (${readyCount}/${state.teams.length}) · WIJZIG` : `KLAAR (${readyCount}/${state.teams.length})`}
+        </button>
       </div>
       {r && (
         <Sheet title={names[info!] || r.name} onClose={() => setInfo(null)}>
@@ -608,8 +972,6 @@ function Lobby({ view, act, president }: GameProps) {
     </section>
   );
 }
-
-// ---- Draft --------------------------------------------------------------------
 
 function Draft({ view, act }: ViewProps) {
   const { state, me } = view;
@@ -637,10 +999,12 @@ function Draft({ view, act }: ViewProps) {
           </>
         )}
       </div>
-      <div class="small">De markt · {state.deckCount} kaarten op de stapel</div>
-      <div class="list grow">
+      <div class="small">
+        De markt · {state.deckCount} kaarten op de stapel · parcours: {stageProfile(state).summary}
+      </div>
+      <div class="cards">
         {state.market.map((m, i) => (
-          <CardTile key={i} def={m} onClick={() => setPick(i)} />
+          <CardTile key={i} def={m} index={i} onClick={() => setPick(i)} />
         ))}
       </div>
       <div class="dock">
@@ -692,19 +1056,20 @@ function Draft({ view, act }: ViewProps) {
 
 // ---- Voorbereiding ------------------------------------------------------------
 
-type Tab = 'team' | 'kaarten' | 'winkel' | 'ruilen';
+type Tab = 'plan' | 'team' | 'kaarten' | 'winkel' | 'ruilen';
+const TABS: Tab[] = ['plan', 'kaarten', 'team', 'winkel', 'ruilen'];
 
 function TeamPhase({ view, act }: ViewProps) {
   const { state, me, teamId } = view;
   const team = state.teams.find((t) => t.id === teamId)!;
   const initial = new URLSearchParams(location.search).get('tab');
-  const [tab, setTab] = useState<Tab>(initial === 'team' || initial === 'winkel' || initial === 'ruilen' ? initial : 'kaarten');
+  const [tab, setTab] = useState<Tab>(TABS.includes(initial as Tab) ? (initial as Tab) : 'plan');
   const readyCount = state.teams.filter((t) => t.ready).length;
   const incoming = me!.offersIn.length;
   return (
     <section class="screen">
       <div class="tabs">
-        {(['kaarten', 'team', 'winkel', 'ruilen'] as Tab[]).map((t) => (
+        {TABS.map((t) => (
           <button key={t} class={`tab ty ${tab === t ? 'on' : ''}`} onClick={() => setTab(t)}>
             {t.toUpperCase()}
             {t === 'kaarten' && me!.hand.length > 0 && <span class="badge">{me!.hand.length}</span>}
@@ -715,6 +1080,7 @@ function TeamPhase({ view, act }: ViewProps) {
       <TutorialHint hint={hintFor(view, { tab })} />
       {me!.sabotageOn.length > 0 && <div class="warn-s">⚠ Iemand heeft iets slechts in de zin met jouw team.</div>}
       <div class="tabbody">
+        {tab === 'plan' && <PlanTab view={view} act={act} />}
         {tab === 'kaarten' && <HandTab view={view} act={act} />}
         {tab === 'team' && <BoardTab view={view} />}
         {tab === 'winkel' && <ShopTab view={view} act={act} />}
@@ -726,6 +1092,53 @@ function TeamPhase({ view, act }: ViewProps) {
         </button>
       </div>
     </section>
+  );
+}
+
+function PlanTab({ view, act }: ViewProps) {
+  const { state, me, teamId } = view;
+  const team = state.teams.find((t) => t.id === teamId)!;
+  const riders = state.riders.filter((r) => r.teamId === teamId);
+  const perks = perksOf(teamDefIds(team.slots));
+  const p = stageProfile(state);
+  const fits = riders.map((r) => stageFit(r, state.terrain, perks.overtrainTolerance));
+  const top = Math.max(...fits);
+  return (
+    <div class="stack tight">
+      <div class="plan-head">
+        <b class="ty">{p.stageName}</b>
+        <span class="dim s">{p.premies ? `Premies: ${p.premies.toLowerCase()}` : 'Geen premies'}</span>
+      </div>
+      <Profile state={state} />
+      <ProfileLegend state={state} />
+      <div class="small sec">Kies je kopman: zijn punten tellen dubbel</div>
+      <div class="stack tight">
+        {riders.map((r, i) => {
+          const sel = me!.kopmanId === r.id;
+          const fit = Math.round((fits[i] / Math.max(top, 1)) * 100);
+          const best = fits[i] === top;
+          return (
+            <button class={`kop-pick ${sel ? 'on' : ''}`} key={r.id} onClick={() => act({ type: 'kopman', riderId: r.id })}>
+              <span class="kp-top">
+                <b>{r.name}</b>
+                <span class="dim s">{RIDER_TYPES[r.type].label}</span>
+                {sel && <span class="kp-tag ty">★ KOPMAN ×2</span>}
+              </span>
+              <span class="kp-fit">
+                <span class="small">Past bij dit parcours{best ? ' · beste keuze' : ''}</span>
+                <span class="ebar">
+                  <span class={`fill ${fit >= 90 ? 'high' : fit >= 75 ? 'mid' : 'low'}`} style={{ width: `${fit}%` }} />
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <p class="dim s">
+        De andere twee zijn knechten. In de race kunnen ze binnen {HELP_RANGE} tegels van je kopman helpen: hij krijgt dan {HELP_BONUS} tegels extra.
+        Train je kopman bij: dan past hij nog beter.
+      </p>
+    </div>
   );
 }
 
@@ -756,6 +1169,7 @@ function BoardTab({ view }: { view: View }) {
               <span>
                 Vermoeid <Pips value={r.fatigue} limit={limit} />
                 {over && <span class="warn-s"> overtraind</span>}
+                {r.injury > 0 && <span class="warn-s"> geblesseerd</span>}
               </span>
               <span class="dim">Training {r.trained}/{TRAININGS_PER_RIDER}</span>
             </div>
@@ -813,9 +1227,9 @@ function HandTab({ view, act }: ViewProps) {
   const full = slot ? team.slots[slot].length >= SLOT_LIMITS[slot] : false;
   return (
     <>
-      <div class="tiles">
-        {hand.map((x) => (
-          <CardTile key={x.id} def={x.def} onClick={() => setSel(x.id)} />
+      <div class="cards">
+        {hand.map((x, i) => (
+          <CardTile key={x.id} def={x.def} index={i} onClick={() => setSel(x.id)} />
         ))}
       </div>
       {c && d && (
@@ -874,6 +1288,12 @@ function HandTab({ view, act }: ViewProps) {
                 ))}
               </div>
             )}
+            {d.kind === 'race' && (
+              <p class="dim">
+                Je speelt deze kaart in de race, onder een renner. Ongebruikte kaarten blijven bewaard voor de
+                volgende ronde en etappe.
+              </p>
+            )}
             {d.kind === 'sabotage' && (
               <div class="chips">
                 {others.map((t) => (
@@ -910,9 +1330,9 @@ function ShopTab({ view, act }: ViewProps) {
           Blind trekken (€ {BLIND_COST})
         </button>
       </div>
-      <div class="list">
+      <div class="cards">
         {state.market.map((m, i) => (
-          <CardTile key={i} def={m} price dim={team.coins < CARD_DEFS[m].price} onClick={() => setPick(i)} />
+          <CardTile key={i} def={m} index={i} price dim={team.coins < CARD_DEFS[m].price} onClick={() => setPick(i)} />
         ))}
       </div>
       {def && (
@@ -1140,43 +1560,171 @@ function Stepper({ label, value, max, onChange }: { label: string; value: number
 
 // ---- Race ---------------------------------------------------------------------
 
+interface PlannedItem {
+  item: RaceItem;
+  targetId?: string;
+}
+
+/** Kies welke tegenstander je blokkeert: alleen renners binnen bereik van je knecht. */
+function AimSheet({ state, by, onPick }: { state: PublicState; by: Rider; onPick: (riderId: string) => void }) {
+  const targets = state.riders
+    .filter((x) => canBlock(by, x))
+    .sort((a, b) => b.pos - a.pos);
+  const rankOf = (r: Rider) => 1 + state.riders.filter((x) => x.pos > r.pos).length;
+  return (
+    <div class="stack tight">
+      <p class="dim">
+        {firstName(by.name)} knijpt een tegenstander dicht: die rijdt {BLOCK_PENALTY} tegels minder en krijgt geen drafting.
+        Alleen renners binnen {BLOCK_RANGE} tegels.
+      </p>
+      {targets.length === 0 && <p>Er rijdt niemand binnen bereik.</p>}
+      {targets.map((x) => {
+        const gap = Math.round(x.pos - by.pos);
+        const team = state.teams.find((t) => t.id === x.teamId);
+        return (
+          <button key={x.id} class="small-btn aim" onClick={() => onPick(x.id)}>
+            <b>{x.name}</b>
+            <span class="dim">
+              {team?.name} · {ordinal(rankOf(x))} ·{' '}
+              {gap === 0 ? 'naast je' : gap > 0 ? `${gap} voor je` : `${-gap} achter je`}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function Race({ view, act }: ViewProps) {
   const { state, me, teamId } = view;
   const team = state.teams.find((t) => t.id === teamId)!;
-  const riders = state.riders.filter((r) => r.teamId === teamId);
+  // De kopman staat bovenaan: hij is waar het om draait.
+  const riders = state.riders
+    .filter((r) => r.teamId === teamId)
+    .sort((a, b) => Number(b.id === me!.kopmanId) - Number(a.id === me!.kopmanId));
   const perks = perksOf(teamDefIds(team.slots));
+  const rows = standing(state);
   const [choice, setChoice] = useState<Record<string, Effort>>({});
-  const [sheet, setSheet] = useState<'event' | string | null>(null);
-  useEffect(() => setChoice({}), [state.round]);
+  const [sheet, setSheet] = useState<'event' | 'weather' | 'premies' | string | null>(null);
+  // Volgauto en racekaarten: `undefined` = nog niets gekozen, dan stellen we de renner met de meeste dorst voor.
+  const [carPick, setCarPick] = useState<string | null | undefined>(undefined);
+  const [items, setItems] = useState<Record<string, PlannedItem>>({});
+  const [aim, setAim] = useState<string | null>(null); // knecht die een blokkade-doelwit kiest
+  useEffect(() => {
+    setChoice({});
+    setCarPick(undefined);
+    setItems({});
+    setAim(null);
+  }, [state.round]);
   const locked = team.locked;
   const shown = locked ? me!.efforts : choice;
+  const perkSet = perksOf(teamDefIds(team.slots));
+  const hand = me!.hand;
+  const itemOfCard = (id: string): RaceItem | undefined => {
+    const c = hand.find((x) => x.id === id);
+    return c ? CARD_DEFS[c.def].race : undefined;
+  };
+  const lockedItems: Record<string, PlannedItem> = {};
+  for (const p of me!.plays) {
+    const it = itemOfCard(p.cardId);
+    if (it) lockedItems[p.riderId] = { item: it, targetId: p.targetId };
+  }
+  const shownItems = locked ? lockedItems : items;
+  const thirst = (r: Rider) => r.maxEnergy - (r.energy + (shownItems[r.id]?.item === 'gel' ? GEL_ENERGY : 0));
+  const suggestedCar = [...riders].sort((a, b) => thirst(b) - thirst(a))[0]?.id ?? null;
+  const shownCar = locked ? me!.car : carPick === undefined ? suggestedCar : carPick;
+  const haveOf = (item: RaceItem) => hand.filter((c) => CARD_DEFS[c.def].race === item).length;
+  const plannedOf = (item: RaceItem, except?: string) =>
+    Object.entries(shownItems).filter(([rid, p]) => p.item === item && rid !== except).length;
+  const setItem = (riderId: string, p: PlannedItem | null) => {
+    const next = { ...items };
+    if (p) next[riderId] = p;
+    else delete next[riderId];
+    setItems(next);
+  };
+  const confirm = () => {
+    const used = new Set<string>();
+    const plays: RacePlay[] = [];
+    for (const [riderId, p] of Object.entries(items)) {
+      const card = hand.find((c) => CARD_DEFS[c.def].race === p.item && !used.has(c.id));
+      if (!card) continue;
+      used.add(card.id);
+      plays.push({ cardId: card.id, riderId, ...(p.targetId ? { targetId: p.targetId } : {}) });
+    }
+    act({
+      type: 'effort',
+      efforts: Object.fromEntries(riders.map((r) => [r.id, choice[r.id] ?? (r.energy <= 0 && !items[r.id] ? 'rustig' : 'normaal')])),
+      car: shownCar,
+      plays,
+    });
+  };
+  const unlock = () => {
+    // Je keuzes blijven staan als je wijzigt, ook na een herlaad.
+    setItems(lockedItems);
+    setCarPick(me!.car);
+    setChoice({ ...me!.efforts });
+    act({ type: 'unlock' });
+  };
   const ev = state.event ? EVENTS[state.event.id] : null;
+  const groups = groupsOf(state.riders);
   const picked = riders.find((r) => r.id === sheet);
+  const kopmanId = me!.kopmanId;
+  const nameOf = (id: string) => state.riders.find((r) => r.id === id)?.name ?? '?';
+  const teamOfRider = (id: string) => state.teams.find((t) => t.id === state.riders.find((r) => r.id === id)?.teamId);
+  const SHORT: Record<Effort, string> = { rustig: 'Rustig', normaal: 'Normaal', alles: 'Alles', helpen: 'Helpen' };
 
   return (
     <section class="screen">
       <TutorialHint hint={hintFor(view, { locked })} />
-      {ev && (
-        <div class="strip">
-          <StripBtn label="Gebeurtenis" value={ev.title} tone={ev.silly ? 'silly' : ''} onClick={() => setSheet('event')} />
-        </div>
-      )}
+      <div class="strip">
+        {ev && <StripBtn label="Gebeurtenis" value={ev.title} tone={ev.silly ? 'silly' : ''} onClick={() => setSheet('event')} />}
+        <StripBtn
+          label="Weer"
+          value={`${WEATHER[state.weather].icon} ${WEATHER[state.weather].label}`}
+          tone={state.weather === 'rain' ? 'silly' : ''}
+          onClick={() => setSheet('weather')}
+        />
+      </div>
+      <Profile state={state} teamId={teamId} onClick={() => setSheet('premies')} />
       <div class="riders grow">
         {riders.map((r) => {
           const terrain = terrainAt(state, r.pos);
-          const empty = r.energy <= 0;
+          const standRow = rows.find((x) => x.rider.id === r.id);
+          const plan = shownItems[r.id];
+          const gelOn = plan?.item === 'gel';
+          const colaOn = plan?.item === 'cola';
+          // Een gel telt mee voor wat je deze ronde kunt: de knoppen rekenen met de energie erna.
+          const energy = gelOn ? Math.min(r.maxEnergy, r.energy + GEL_ENERGY) : r.energy;
+          const empty = energy <= 0;
           const sel = shown[r.id] ?? 'normaal';
-          const pct = r.maxEnergy ? Math.round((r.energy / r.maxEnergy) * 100) : 0;
+          const pct = r.maxEnergy ? Math.round((energy / r.maxEnergy) * 100) : 0;
+          const targetName = plan?.targetId ? firstName(nameOf(plan.targetId)) : '';
+          const inReach = state.riders.filter((x) => canBlock(r, x));
+          const isKop = r.id === kopmanId;
+          const near = !isKop && canHelp(state, r);
+          const paces: Effort[] = isKop ? PACE_ORDER : [...PACE_ORDER, 'helpen'];
+          // De kopman telt de hulp mee die zijn knechten nu hebben gekozen.
+          const helpIn = isKop
+            ? riders.filter((x) => x.id !== r.id && shown[x.id] === 'helpen' && canHelp(state, x)).length
+            : 0;
           return (
             <div class="frame rider" key={r.id}>
               <div class="r-top">
                 <b class="r-name">{r.name}</b>
-                <span class="dim r-sub">
-                  {RIDER_TYPES[r.type].label} · {ordinal(1 + state.riders.filter((x) => x.pos > r.pos).length)}
-                </span>
+                {isKop && <span class="kp-tag ty">★ KOPMAN ×2</span>}
+                <span class="dim r-sub">{RIDER_TYPES[r.type].label}</span>
                 <button class="info" aria-label={`Over ${r.name}`} onClick={() => setSheet(r.id)}>
                   i
                 </button>
+              </div>
+              <div class="place">
+                <b class={`pl ty ${standRow?.rank === 1 ? 'first' : ''}`}>{ordinal(standRow?.rank ?? 1)}</b>
+                <span class="pl-text">{placeText(standRow, state)}</span>
+                {standRow?.ahead && standRow.gapAhead > 0 && (
+                  <span class="pl-ahead">
+                    {tiles(standRow.gapAhead)} achter {firstName(standRow.ahead.name)}
+                  </span>
+                )}
               </div>
               <div class="energy">
                 <span class={`terr t-${terrain}`}>
@@ -1185,24 +1733,80 @@ function Race({ view, act }: ViewProps) {
                 <span class="ebar">
                   <span class={`fill ${pct <= 25 ? 'low' : pct <= 55 ? 'mid' : 'high'}`} style={{ width: `${pct}%` }} />
                 </span>
-                <span class={`el ${empty ? 'warn-s' : ''}`}>{empty ? 'Op de fles' : `${r.energy}/${r.maxEnergy}`}</span>
+                <span class={`el ${empty ? 'warn-s' : ''} ${gelOn ? 'boost' : ''}`}>
+                  {empty ? 'Op de fles' : `${energy}/${r.maxEnergy}`}
+                </span>
               </div>
-              <div class="efforts">
-                {(Object.keys(EFFORTS) as Effort[]).map((e) => {
-                  const real = resolveEffort(r.energy, perks, e);
-                  const mv = sumParts(baseParts(state, r, perks, real.effort, real.exhausted));
-                  const disabled = locked || real.effort !== e;
-                  const cost = e === 'alles' ? -allesCost(perks) : EFFORTS[e].energy;
+              <div class={`efforts ${paces.length === 4 ? 'four' : ''}`}>
+                {paces.map((e) => {
+                  const helpE = e === 'helpen';
+                  const real = resolveEffort(energy, perks, e);
+                  const parts = baseParts(state, r, perks, real.effort, real.exhausted);
+                  if (helpE) parts.effort = 0;
+                  const grp = groups.get(r.id);
+                  const teamBonus = grp && !helpE ? Math.min(TEAM_BONUS_MAX, grp.mates * TEAM_BONUS) : 0;
+                  const mv = sumParts(parts) + teamBonus + (isKop && !helpE ? HELP_BONUS * helpIn : 0) + (colaOn ? COLA_BONUS : 0);
+                  const disabled = locked || (helpE ? !near : real.effort !== e);
+                  let cost = e === 'alles' ? -allesCost(perks) : helpE ? EFFORTS.normaal.energy : EFFORTS[e].energy;
+                  // In een peloton rijd je lichter, alleen kost het extra (vol gas blijft vol gas).
+                  if (grp && !(real.exhausted)) {
+                    if (grp.size >= PELOTON_MIN) cost += e === 'alles' ? 0 : PELOTON_REST;
+                    else if (e !== 'rustig') cost -= ALONE_COST;
+                  }
                   return (
                     <button
                       key={e}
-                      class={`eff ${sel === e ? 'on' : ''}`}
+                      class={`eff ${sel === e ? 'on' : ''} ${helpE ? 'help' : ''}`}
                       disabled={disabled}
                       onClick={() => setChoice({ ...choice, [r.id]: e })}
                     >
-                      <span class="ty">{EFFORTS[e].label}</span>
+                      <span class="ty">{paces.length === 4 ? SHORT[e] : EFFORTS[e].label}</span>
                       <span class="mv">≈ +{mv}</span>
-                      <span class="en">{cost > 0 ? `+${cost}` : cost} energie</span>
+                      <span class="en">
+                        {helpE
+                          ? near
+                            ? `kopman +${HELP_BONUS}`
+                            : 'te ver weg'
+                          : `${cost > 0 ? `+${cost}` : cost} energie`}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div class="extras">
+                <button
+                  class={`xbtn car ${shownCar === r.id ? 'on' : ''}`}
+                  disabled={locked}
+                  title="De volgauto rijdt bij deze renner en geeft hem een slok energie"
+                  onClick={() => setCarPick(shownCar === r.id ? null : r.id)}
+                >
+                  🚗 Volgauto +{perkSet.service > 0 ? CAR_ENERGY_UPGRADED : CAR_ENERGY}
+                </button>
+                {(['gel', 'cola', 'blok'] as RaceItem[]).map((it) => {
+                  const mine = plan?.item === it;
+                  const left = haveOf(it) - plannedOf(it, r.id);
+                  if (!mine && left <= 0) return null;
+                  const gain = Math.min(GEL_ENERGY, r.maxEnergy - r.energy);
+                  const full = it === 'gel' && gain <= 0;
+                  const noTarget = it === 'blok' && inReach.length === 0;
+                  const label = it === 'gel' ? 'Gel' : it === 'cola' ? 'Cola' : 'Blok';
+                  const glyph = it === 'gel' ? '🧃' : it === 'cola' ? '🚀' : '🚧';
+                  return (
+                    <button
+                      key={it}
+                      class={`xbtn ${it} ${mine ? 'on' : ''}`}
+                      disabled={locked || (!mine && (full || noTarget))}
+                      title={full ? 'Volle energie' : noTarget ? `Niemand binnen ${BLOCK_RANGE} tegels` : CARD_DEFS[it].text}
+                      onClick={() => {
+                        if (mine) return setItem(r.id, null);
+                        if (it === 'blok') return setAim(r.id);
+                        setItem(r.id, { item: it });
+                      }}
+                    >
+                      {glyph} {label}
+                      {it === 'gel' && !full ? ` +${gain}` : ''}
+                      {mine && it === 'blok' && targetName ? ` → ${targetName}` : ''}
+                      {!mine && left > 1 ? ` ×${left}` : ''}
                     </button>
                   );
                 })}
@@ -1215,27 +1819,68 @@ function Race({ view, act }: ViewProps) {
         {locked ? (
           <>
             <p class="ok center ty">TEMPO VASTGELEGD</p>
-            <button class="big ty" onClick={() => act({ type: 'unlock' })}>
+            <button class="big ty" onClick={unlock}>
               WIJZIG
             </button>
           </>
         ) : (
-          <button
-            class="big primary ty"
-            onClick={() =>
-              act({
-                type: 'effort',
-                efforts: Object.fromEntries(riders.map((r) => [r.id, choice[r.id] ?? (r.energy <= 0 ? 'rustig' : 'normaal')])),
-              })
-            }
-          >
+          <button class="big primary ty" onClick={confirm}>
             BEVESTIGEN
           </button>
         )}
       </div>
+      {aim && (
+        <Sheet title="Wie blokkeer je?" onClose={() => setAim(null)}>
+          <AimSheet
+            state={state}
+            by={state.riders.find((r) => r.id === aim)!}
+            onPick={(targetId) => {
+              setItem(aim, { item: 'blok', targetId });
+              setAim(null);
+            }}
+          />
+        </Sheet>
+      )}
+      {sheet === 'weather' && (
+        <Sheet title={`Weer: ${WEATHER[state.weather].label}`} onClose={() => setSheet(null)}>
+          <p>{WEATHER[state.weather].blurb}</p>
+          <p class="dim s">
+            Bij nat wegdek valt er veel meer. Afdalingen, kasseien en Alles geven maken het risico groter, regenbanden
+            helpen. Een gevallen renner verliest tegels en energie; bij een zware val begint hij de volgende etappe
+            geblesseerd.
+          </p>
+        </Sheet>
+      )}
       {sheet === 'event' && ev && (
         <Sheet title={ev.title} onClose={() => setSheet(null)}>
           <p>{ev.blurb}</p>
+        </Sheet>
+      )}
+      {sheet === 'premies' && (
+        <Sheet title="Stand en parcours" onClose={() => setSheet(null)}>
+          <div class="stack">
+            <Profile state={state} teamId={teamId} />
+            <ProfileLegend state={state} />
+            <Stand state={state} teamId={teamId} />
+            {state.premies.map((p) => (
+              <div class="stack tight" key={p.id}>
+                <div class="small">
+                  {PREMIE_INFO[p.id].label} · tegel {p.pos} van {state.trackLength}
+                </div>
+                <p class="dim">{PREMIE_INFO[p.id].blurb}</p>
+                {p.hits.length === 0 && <p>Nog niemand gepasseerd. Er zijn nog {PREMIE_POINTS.length} plekken.</p>}
+                {p.hits.map((h, i) => (
+                  <p key={i}>
+                    <b>
+                      {i + 1}. {nameOf(h.riderId)}
+                    </b>{' '}
+                    ({teamOfRider(h.riderId)?.name}) +{h.points}
+                  </p>
+                ))}
+              </div>
+            ))}
+            {state.premies.length === 0 && <p class="dim">Geen premies in deze etappe.</p>}
+          </div>
         </Sheet>
       )}
       {picked && (
@@ -1256,31 +1901,60 @@ function Resolve({ view }: { view: View }) {
   const { state, teamId } = view;
   const rep = state.report;
   const mine = state.riders.filter((r) => r.teamId === teamId);
+  const nameOf = (id: string) => state.riders.find((r) => r.id === id)?.name ?? '?';
+  const myTeam = state.teams.find((t) => t.id === teamId)!;
+  const carBonus = perksOf(teamDefIds(myTeam.slots)).service > 0 ? CAR_ENERGY_UPGRADED : CAR_ENERGY;
+  const rows = standing(state);
   return (
     <section class="screen">
       <TutorialHint hint={hintFor(view, {})} />
       <p class="center ty look">KIJK NAAR DE TV</p>
+      {rep && rep.premies.some((h) => mine.some((r) => r.id === h.riderId)) && (
+        <div class="frame premie-win">
+          {rep.premies
+            .filter((h) => mine.some((r) => r.id === h.riderId))
+            .map((h, i) => (
+              <p key={i}>
+                <b>{PREMIE_INFO[h.premieId].label}:</b> {state.riders.find((r) => r.id === h.riderId)!.name} +{h.points} punten!
+              </p>
+            ))}
+        </div>
+      )}
       <div class="stack grow">
         {rep &&
           mine.map((r) => {
             const m = rep.moves.find((x) => x.riderId === r.id);
             if (!m) return null;
+            const row = rows.find((x) => x.rider.id === r.id);
             const p = m.parts;
+            const blokPlay = rep.plays.find((x) => x.riderId === r.id && x.item === 'blok');
+            const blokTarget = blokPlay?.targetRiderId ? nameOf(blokPlay.targetRiderId) : '';
             const fmt = (n: number) => `${n > 0 ? '+' : ''}${n}`;
             const bits = [
-              EFFORTS[m.effort].label,
+              m.helping ? 'Helpen' : EFFORTS[m.effort].label,
               p.stat ? `kracht ${fmt(p.stat)}` : '',
               p.terrain ? `uitrusting/terrein ${fmt(p.terrain)}` : '',
               p.quirk ? `eigenaardigheid ${fmt(p.quirk)}` : '',
               p.event ? `omstandigheden ${fmt(p.event)}` : '',
-              p.draft ? 'drafting +1' : '',
-              p.chase ? `peloton trekt terug +${p.chase}` : '',
+              p.draft > 0 ? `drafting +${p.draft}` : '',
+              p.draft < 0 ? `alleen in de wind ${p.draft}` : '',
+              m.groupSize >= 3 ? 'in het peloton' : '',
+              p.team ? `teamwerk +${p.team}` : '',
+              p.chase ? `peloton jaagt +${p.chase}` : '',
+              m.helping ? `helpt de kopman (+${HELP_BONUS} voor hem)` : '',
+              p.help ? `knechten +${p.help}` : '',
               m.windPaid ? 'kopwerk: -1 energie' : '',
               m.pech ? `pech ${fmt(p.luck)}` : '',
-              m.shielded ? 'reservefiets redt je' : '',
+              m.crash === 'fall' ? `GEVALLEN ${fmt(p.crash)}${m.injured ? ', zwaar: volgende etappe -1' : ''}` : '',
+              m.crash === 'domino' ? `meegevallen ${fmt(p.crash)}` : '',
+              m.shielded ? 'reservefiets of volgauto redt je' : '',
               m.boost ? 'meewind +1' : '',
               m.exhausted ? 'op de fles' : '',
-              m.service ? 'volgauto: +3 energie' : '',
+              m.item === 'gel' ? `gel: +${GEL_ENERGY} energie` : '',
+              m.item === 'cola' ? `cola: +${COLA_BONUS} tegels` : '',
+              blokTarget ? `blokkade op ${firstName(blokTarget)}` : '',
+              m.blockedBy ? `geblokkeerd door ${firstName(nameOf(m.blockedBy))}: ${fmt(p.item)} en geen drafting` : '',
+              m.car ? `volgauto: +${carBonus} energie${m.shielded ? ', pech opgevangen' : ''}` : '',
             ].filter(Boolean);
             return (
               <div class="frame result" key={r.id}>
@@ -1290,6 +1964,12 @@ function Resolve({ view }: { view: View }) {
                 </div>
                 <div class="dim s">{bits.join(' · ')}</div>
                 <div class="dim s">Energie nu: {m.energyAfter}</div>
+                {row && (
+                  <div class="s now-place">
+                    <b>{ordinal(row.rank)}</b> · {placeText(row, state)}
+                    {row.ahead && row.gapAhead > 0 && ` · ${tiles(row.gapAhead)} achter ${firstName(row.ahead.name)}`}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -1317,6 +1997,10 @@ function Results({ view, president }: { view: View; president: (w: PresidentActi
         <div class="place">{ordinal(place)}</div>
         <div>
           <b>+{mine.stagePoints}</b> punten · <b>{mine.totalPoints}</b> totaal
+        </div>
+        <div class="dim s">
+          eindstand {mine.riderPoints} (kopman dubbel)
+          {mine.premiePoints > 0 ? ` · premies ${mine.premiePoints}` : ''}
         </div>
       </div>
       <div class="strip">
@@ -1415,5 +2099,6 @@ function Finished({ view, president }: { view: View; president: (w: PresidentAct
   );
 }
 
+installClickSounds();
 render(<App />, document.getElementById('app')!);
 

@@ -95,7 +95,6 @@ async function main() {
   await me.open();
   me.send({ t: 'player:join', code, name: 'Remco' });
   await until(() => !!me.token, 10000, 'meedoen');
-  me.act({ type: 'nameRiders', names: ['Remco Rouleur', 'Pieter Peddel', 'Wout van Weg'] });
   me.send({ t: 'president', what: 'tutorialOn' });
   for (let i = 0; i < 3; i++) {
     me.send({ t: 'president', what: 'addBot' });
@@ -161,6 +160,9 @@ async function main() {
     for (const r of riders) {
       const toGo = s.trackLength - r.pos;
       efforts[r.id] = r.energy <= 2 ? 'rustig' : toGo <= 6 ? 'alles' : Math.random() < 0.3 ? 'alles' : 'normaal';
+      // Een knecht in de buurt van de kopman helpt af en toe.
+      const kop = s.riders.find((x) => x.id === c.me!.kopmanId);
+      if (kop && r.id !== kop.id && Math.abs(r.pos - kop.pos) <= 3 && Math.random() < 0.5) efforts[r.id] = 'helpen';
     }
     c.act({ type: 'effort', efforts });
   };
@@ -168,6 +170,45 @@ async function main() {
   me.onState = (c) => {
     const s = c.state!;
     if (hold || !c.me) return;
+    if (s.phase === 'briefing') {
+      // De uitleg vooraf: eerst een pagina in het midden en de laatste, dan door naar de draft.
+      once('brief', () => {
+        hold = true;
+        void (async () => {
+          for (let i = 0; i < 2; i++) {
+            c.send({ t: 'president', what: 'briefNext' });
+            await sleep(300);
+          }
+          await Promise.all([shotTv('tv-1b-uitleg', 3500), shotPhone('phone-1b-uitleg')]);
+          hold = false;
+          c.send({ t: 'president', what: 'briefDone' });
+        })();
+      });
+      return;
+    }
+    if (s.phase === 'recruit' && c.me.pickPending) {
+      // Kies de eerste betaalbare renner, en neem bij de eerste keuze een screenshot.
+      const coins = s.teams.find((t) => t.id === c.teamId)!.coins;
+      const index = Math.max(0, s.recruit!.market.findIndex((m) => m.price <= coins && m.price > 0));
+      if (!done.has('shot-recruit')) {
+        done.add('shot-recruit');
+        hold = true;
+        void Promise.all([shotTv('tv-1c-rekruteren'), shotPhone('phone-1c-rekruteren')]).then(() => {
+          hold = false;
+          c.act({ type: 'recruit', index });
+        });
+        return;
+      }
+      once(`recruit-${s.recruit!.idx}`, () => c.act({ type: 'recruit', index }));
+      return;
+    }
+    if (s.phase === 'naming') {
+      once('naming', () => {
+        c.act({ type: 'nameRiders', names: ['Remco Rouleur', 'Pieter Peddel', 'Wout van Weg'] });
+        c.act({ type: 'ready' });
+      });
+      return;
+    }
     if (s.phase === 'draft' && c.me.pickPending) {
       if (s.stage === 1 && !done.has('shot-draft')) {
         done.add('shot-draft');
@@ -193,7 +234,8 @@ async function main() {
           await sleep(500);
           await Promise.all([
             shotTv('tv-3-team'),
-            shotPhone('phone-3-kaarten', '', 1100),
+            shotPhone('phone-3-kaarten', '&tab=kaarten', 1100),
+            shotPhone('phone-3b-plan', '&tab=plan', 1100),
             shotPhone('phone-4-team', '&tab=team', 1400),
           ]);
           hold = false;

@@ -1,3 +1,5 @@
+@import './card.css';
+
 :root {
   /* Flat palette: solid fills, hairline borders, no shadows. */
   --bg: #0d0f17;

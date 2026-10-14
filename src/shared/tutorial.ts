@@ -3,7 +3,7 @@
 
 import type { PublicState } from './types';
 
-export type PhoneTab = 'kaarten' | 'team' | 'winkel' | 'ruilen';
+export type PhoneTab = 'plan' | 'kaarten' | 'team' | 'winkel' | 'ruilen';
 
 export interface Hint {
   id: string; // stabiel: de telefoon onthoudt welke uitleg je al hebt weggeklikt
@@ -32,16 +32,43 @@ export function phoneHint(s: PublicState, c: HintContext): Hint | null {
             id: 'lobby-president',
             title: 'Zo begin je',
             steps: [
-              'Geef je drie renners een naam, of laat de willekeurige namen staan.',
               'Te weinig spelers? Voeg bots toe met + BOT.',
-              'Druk op Start het seizoen als iedereen binnen is. Daarna ben je 3 etappes bezig.',
+              'Druk op Start het seizoen als iedereen binnen is. Daarna rekruteert iedereen eerst drie renners.',
+              'Daarna ben je 3 etappes bezig.',
             ],
           }
         : {
             id: 'lobby-player',
             title: 'Even wachten',
-            steps: ['Geef je drie renners een naam, of laat de willekeurige namen staan.', 'De president start het seizoen zodra iedereen er is.'],
+            steps: ['Je rekruteert straks je eigen drie renners.', 'De president start het seizoen zodra iedereen er is.'],
           };
+    case 'briefing':
+      return null; // de uitleg vooraf is zelf het scherm
+    case 'recruit':
+      return c.myTurn
+        ? {
+            id: 'recruit-turn',
+            title: 'Rekruteer een renner',
+            steps: [
+              'Tik op een renner om hem te contracteren. Je kiest er drie, om de beurt.',
+              'Sterren en talenten kosten munten. Die munten heb je ook nodig voor kaarten, dus kies met zorg.',
+              'Kijk naar het type: sprinters winnen sprints, klimmers dansen in de bergen, knechten trekken je kopman.',
+            ],
+          }
+        : {
+            id: 'recruit-wait',
+            title: 'Wacht op je beurt',
+            steps: [
+              'Iedereen kiest uit dezelfde pool. Kijk alvast wie je wilt hebben.',
+              'Je maakt een ploeg van drie. Je hebt een mix van types nodig: niet elke etappe is een sprint.',
+            ],
+          };
+    case 'naming':
+      return {
+        id: 'naming',
+        title: 'Geef je renners een naam',
+        steps: ['Tik op een naam om hem aan te passen, of laat de willekeurige namen staan.', 'Geen timer: druk op Klaar als je klaar bent. De draft begint zodra iedereen klaar is.'],
+      };
     case 'draft':
       return c.myTurn
         ? {
@@ -63,6 +90,16 @@ export function phoneHint(s: PublicState, c: HintContext): Hint | null {
           };
     case 'team': {
       const tabs: Record<PhoneTab, Hint> = {
+        plan: {
+          id: 'team-plan',
+          title: 'Je plan voor deze etappe',
+          steps: [
+            'Bovenaan zie je het parcours: klimmen, vlak, kasseien en de premies waar je punten kunt halen.',
+            'Kies je kopman. Zijn punten tellen dubbel, dus kies de renner die bij het parcours past.',
+            'De andere twee zijn knechten. Zij kunnen in de race de kopman meetrekken.',
+            READY_STEP,
+          ],
+        },
         kaarten: {
           id: 'team-kaarten',
           title: 'Kaarten gebruiken',
@@ -118,10 +155,11 @@ export function phoneHint(s: PublicState, c: HintContext): Hint | null {
             id: 'race-choose',
             title: 'Kies een tempo per renner',
             steps: [
-              'Rustig: langzaam, je herstelt energie. Normaal: stevig tempo, kost 1 energie. Alles geven: het snelst, kost 3 energie.',
+              'Rustig: langzaam, je herstelt energie. Normaal: stevig tempo, kost 1 energie (in een peloton niets). Alles geven: het snelst, kost 4 energie.',
+              'Helpen: een knecht binnen 3 tegels van de kopman rijdt zelf geen tempo, maar de kopman krijgt 3 tegels extra.',
               'Het getal bij elke knop is een schatting van het aantal tegels. Drafting, wind en geluk komen er nog bij.',
-              'Met te weinig energie kan Alles geven niet, en met 0 energie ben je op de fles. Verdeel je energie over de hele etappe.',
-              'Tik op Bevestigen. Als iedereen klaar is rijdt het peloton de ronde.',
+              'Onder elke renner: zet de volgauto bij hem (+1 energie, en pech vangt hij op), eet een gel (+4 energie), drink een cola (+3 tegels) of blokkeer een tegenstander vlakbij.',
+              'Let op de premies: vlak ervoor is vol gas goud waard. Tik op Bevestigen als je klaar bent.',
             ],
           };
     case 'resolve':
@@ -129,9 +167,11 @@ export function phoneHint(s: PublicState, c: HintContext): Hint | null {
         id: 'resolve',
         title: 'Zo lees je de ronde',
         steps: [
-          'Onder je renners zie je waaruit hun beweging bestond.',
-          'Drafting: gratis +1 als je vlak achter iemand rijdt. Kopwerk kost 1 energie.',
-          'Pech en meewind komen door een dobbelsteen. Een reservefiets of mecanicien vangt pech op.',
+          'Onder je renners zie je waaruit hun beweging bestond, inclusief hulp van je knechten.',
+          'Drafting: gratis +1 als je vlak achter iemand rijdt, +2 in een groep van drie of meer. Kopwerk kost 1 energie, alleen rijden extra.',
+          'Samen met je team in één groep geeft extra tegels. In het peloton rijd je lichter; wie wegrijdt wordt teruggehaald.',
+          'Pech, valpartijen en meewind komen door een dobbelsteen. Een reservefiets, mecanicien of een volgauto bij de renner vangt pech op. Bij regen vallen er meer renners.',
+          'Gel, cola, blokkade en de volgauto zie je terug onder de renner die ze gebruikte.',
         ],
       };
     case 'results':
@@ -139,7 +179,7 @@ export function phoneHint(s: PublicState, c: HintContext): Hint | null {
         id: 'results',
         title: 'De uitslag',
         steps: [
-          'Je ziet je punten, munten en bonuskaarten. De laagste in het klassement krijgt extra hulp om terug te komen.',
+          'Je ziet je punten (kopman dubbel), je premies, je munten en bonuskaarten. De laagste in het klassement krijgt extra hulp.',
           'Training vervaagt nu met 1 per eigenschap. Vermoeidheid zakt langzaam.',
           s.stage >= 3 ? 'Dit was de slotetappe. Zo zie je de eindstand.' : 'Hierna begint een nieuwe draft. Plan je voorbereiding slim.',
         ],
@@ -157,17 +197,23 @@ export function phoneHint(s: PublicState, c: HintContext): Hint | null {
 export function tvHint(s: PublicState): { title: string; text: string } | null {
   if (!s.tutorial) return null;
   switch (s.phase) {
+    case 'briefing':
+      return null;
     case 'lobby':
       return { title: 'Meedoen', text: 'Scan de QR-code met je telefoon. De eerste speler is president en start het seizoen.' };
+    case 'recruit':
+      return { title: 'Rekruteren', text: 'Om de beurt contracteert elk team drie renners uit dezelfde pool. Sterren kosten munten, neo-profs zijn gratis.' };
+    case 'naming':
+      return { title: 'Namen', text: 'Op je telefoon: geef je renners een naam en druk op Klaar. Er is geen timer.' };
     case 'draft':
       return { title: 'Op je telefoon', text: 'Ben je aan de beurt? Pak een kaart uit de markt of trek er een van de stapel.' };
     case 'team':
       return {
         title: 'Voorbereiding',
-        text: 'Op je telefoon: train je renners, leg spullen op je bord, koop en ruil. Druk op Klaar als je klaar bent.',
+        text: 'Op je telefoon: kies je kopman, train je renners, leg spullen op je bord, koop en ruil. Druk op Klaar als je klaar bent.',
       };
     case 'race':
-      return { title: 'Tempo kiezen', text: 'Kies per renner Rustig, Normaal of Alles geven. Let op je energie.' };
+      return { title: 'Tempo kiezen', text: 'Kies per renner Rustig, Normaal of Alles geven, of laat een knecht helpen. Zet de volgauto bij een renner, eet een gel of blokkeer een tegenstander. Blijf in het peloton en bij je team, want wegrijden kost veel.' };
     case 'resolve':
       return { title: 'Kijk mee', text: 'Drafting, wind en pech bepalen wie vooruit komt. Op je telefoon zie je de uitleg.' };
     case 'results':

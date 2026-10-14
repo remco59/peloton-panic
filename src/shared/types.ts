@@ -15,15 +15,55 @@ export const FATIGUE_CAP = 6;
 export const OVERTRAIN_FREE = 2; // vermoeidheid tot en met dit niveau geeft geen straf
 export const CHASE_GAP = 4; // tegels achter de mediaan voor de peloton je terugtrekt
 export const POINTS_BY_RANK = [10, 7, 5, 3, 2, 1];
+export const KOPMAN_FACTOR = 2; // de punten van je kopman tellen dubbel
+export const HELP_BONUS = 3; // beweging die de kopman krijgt per knecht die helpt
+export const HELP_RANGE = 3; // een knecht helpt alleen als hij zo dichtbij de kopman rijdt
+export const PREMIE_POINTS = [3, 2, 1]; // tussensprint en bergpremie: de eerste drie renners
+export const GEL_ENERGY = 4; // energie die een gel meteen geeft
+export const COLA_BONUS = 3; // extra tegels van een cola, één ronde
+export const BLOCK_RANGE = 3; // een knecht kan alleen een renner blokkeren die zo dichtbij rijdt
+export const BLOCK_PENALTY = 2; // tegels die een geblokkeerde renner verliest
+export const CAR_ENERGY = 1; // energie die de volgauto de gekozen renner geeft
+export const CAR_ENERGY_UPGRADED = 2; // met een Volgauto-kaart
+export const GROUP_GAP = 2; // renners met zo weinig tegels ertussen rijden in dezelfde groep
+export const PELOTON_MIN = 3; // een groep van minstens zoveel renners is een peloton
+export const PELOTON_REST = 1; // energie die je in een peloton terugkrijgt (je rijdt lichter)
+export const ALONE_COST = 1; // extra energie voor wie alleen of met z'n tweeën rijdt
+export const DRAFT_BIG = 2; // drafting in een peloton (cluster van minstens PELOTON_MIN) is sterker dan in een duo
+export const ALONE_MOVE = 1; // tegels tegenwind voor wie echt alleen rijdt (niet in een afdaling)
+export const TEAM_BONUS = 1; // tegels per teamgenoot in dezelfde groep
+export const TEAM_BONUS_MAX = 2; // maximaal zoveel tegels teamwerk
+export const CHASE_NEAR = 3; // een groep van >= PELOTON_MIN jaagt vanaf zoveel tegels achter een ontsnapper
+export const CHASE_FAR = 6; // en krijgt meer hulp vanaf zoveel tegels
+export const PECH_CHANCE = 2; // op 10: kans op pech per renner per ronde
+export const CRASH_BASE = 3; // procent: kans op een val per renner per ronde
+export const CRASH_WET = 8; // extra procent bij nat wegdek
+export const CRASH_DESCENT = 3; // extra procent in een afdaling
+export const CRASH_COBBLES = 2; // extra procent op kasseien
+export const CRASH_ALL_OUT = 2; // extra procent bij Alles geven
+export const CRASH_CROWD = 1; // extra procent per renner boven twee binnen één tegel
+export const CRASH_LOSS = 5; // tegels die een gevallen renner verliest
+export const CRASH_ENERGY = 2; // energie die een val kost
+export const DOMINO_RANGE = 1; // renners binnen zoveel tegels kunnen meevallen
+export const DOMINO_CHANCE = 35; // procent (nat: +20)
+export const DOMINO_LOSS = 3; // tegels die een meegevallen renner verliest
+export const RECRUIT_PICKS = 3; // renners per team
+export const RECRUIT_MARKET_MAX = 8;
+export const ENERGY_BASE = 3; // maximale energie = ENERGY_BASE + ENERGY_PER_UITHOUDING * uithouding
+export const ENERGY_PER_UITHOUDING = 2;
+export const ENERGY_MIN = 6;
 export const SLOT_LIMITS = { sponsor: 2, staff: 2, material: 2, car: 1 } as const;
 
 export type Terrain = 'flat' | 'climb' | 'descent' | 'cobbles';
-export type RiderType = 'sprinter' | 'climber' | 'rouleur';
+export type RiderType = 'sprinter' | 'climber' | 'rouleur' | 'puncheur' | 'domestique';
+export type Weather = 'dry' | 'mixed' | 'rain';
 export type Stat = 'kracht' | 'klim' | 'sprint' | 'uithouding';
 export type Stats = Record<Stat, number>;
-export type Effort = 'rustig' | 'normaal' | 'alles';
-export type Phase = 'lobby' | 'draft' | 'team' | 'race' | 'resolve' | 'results' | 'finished';
-export type CardKind = 'training' | 'sponsor' | 'staff' | 'material' | 'car' | 'sabotage';
+export type Effort = 'rustig' | 'normaal' | 'alles' | 'helpen';
+export type Phase = 'lobby' | 'briefing' | 'recruit' | 'naming' | 'draft' | 'team' | 'race' | 'resolve' | 'results' | 'finished';
+export type PremieId = 'sprint' | 'berg';
+export type CardKind = 'training' | 'sponsor' | 'staff' | 'material' | 'car' | 'sabotage' | 'race';
+export type RaceItem = 'gel' | 'cola' | 'blok';
 export type SlotKind = keyof typeof SLOT_LIMITS;
 
 export type QuirkId =
@@ -33,7 +73,13 @@ export type QuirkId =
   | 'descentFear'
   | 'windHardened'
   | 'socks'
-  | 'finisher';
+  | 'finisher'
+  | 'napper'
+  | 'rainKing'
+  | 'sugarCube'
+  | 'clumsy'
+  | 'daredevil'
+  | 'lucky';
 
 export type EventId =
   | 'calm'
@@ -45,7 +91,24 @@ export type EventId =
   | 'chicken'
   | 'wrongTurn'
   | 'sandwich'
-  | 'crowd';
+  | 'cow'
+  | 'tractor'
+  | 'goat'
+  | 'selfie'
+  | 'bbq'
+  | 'crowd'
+  | 'oil'
+  | 'storm'
+  | 'mist'
+  | 'nails'
+  | 'blessing'
+  | 'wasps'
+  | 'drone'
+  | 'fanBottle'
+  | 'dogRun'
+  | 'detour'
+  | 'mascot'
+  | 'grandma';
 
 export interface Card {
   id: string;
@@ -65,6 +128,14 @@ export interface Rider {
   trained: number; // trainingen deze etappe
   energy: number; // alleen in de race
   maxEnergy: number;
+  injury: number; // 1 = geblesseerd in deze etappe: -1 op alle eigenschappen
+  hurt: boolean; // viel zwaar in deze etappe: begint de volgende etappe geblesseerd
+}
+
+/** Een renner op de rekruteringsmarkt. */
+export interface Candidate {
+  rider: Rider; // teamId is leeg zolang niemand hem heeft
+  price: number; // startmunten
 }
 
 export interface TeamStats {
@@ -74,6 +145,11 @@ export interface TeamStats {
   alles: number;
   exhausted: number;
   sabotages: number;
+  helps: number; // keer dat een knecht de kopman hielp
+  crashes: number; // keren dat een renner van dit team viel
+  premies: number; // premiepunten gehaald
+  items: number; // racekaarten ingezet (gel, cola, blokkade)
+  blocks: number; // keer dat een blokkade raak was
 }
 
 export interface Team {
@@ -87,7 +163,6 @@ export interface Team {
   slots: Record<SlotKind, Card[]>;
   sabotage: string[]; // def-ids van sabotage die dit team deze etappe treft
   raceShield: number; // reservefietsen die nog pech opvangen
-  raceService: number; // volgauto-servicemomenten die nog over zijn
   stats: TeamStats;
   isBot: boolean;
 }
@@ -122,6 +197,10 @@ export interface MoveParts {
   tired: number; // op de fles
   draft: number;
   chase: number;
+  help: number; // knechten die de kopman meetrekken
+  item: number; // cola (+) of geblokkeerd (-)
+  team: number; // teamgenoten in dezelfde groep
+  crash: number; // valpartij (negatief)
 }
 
 export interface RiderMove {
@@ -135,19 +214,56 @@ export interface RiderMove {
   windPaid: boolean;
   exhausted: boolean;
   pech: boolean;
+  crash: 'none' | 'fall' | 'domino'; // val: zelf gevallen of meegevallen
+  injured: boolean; // zware val: blessure voor de volgende etappe
+  groupSize: number; // hoeveel renners er in zijn groep reden
+  teammates: number; // teamgenoten in zijn groep
   shielded: boolean;
   boost: boolean;
-  service: boolean;
+  car: boolean; // de volgauto reed bij deze renner
+  item: RaceItem | null; // gel of cola die deze renner gebruikte
+  blockedBy: string | null; // riderId van de knecht die hem blokkeerde
+  helping: boolean; // dit was een knecht die de kopman hielp
   energyAfter: number;
   clusterIndex: number;
+}
+
+export interface Premie {
+  id: PremieId;
+  pos: number; // wie deze positie passeert, scoort
+  hits: { riderId: string; points: number }[];
+}
+
+export interface PremieHit {
+  premieId: PremieId;
+  riderId: string;
+  points: number;
+}
+
+/** Een racekaart die in deze ronde is ingezet: zichtbaar zodra de ronde wordt afgehandeld. */
+export interface PlayHit {
+  teamId: string;
+  riderId: string; // renner die de kaart gebruikt (bij blokkade: de blokkerende knecht)
+  item: RaceItem;
+  targetRiderId?: string; // bij blokkade: de geblokkeerde renner
 }
 
 export interface ResolveReport {
   round: number;
   moves: RiderMove[];
+  premies: PremieHit[];
+  plays: PlayHit[];
+  carRiderIds: string[]; // waar de volgauto's deze ronde reden
   leaderRiderId: string;
   prevLeaderRiderId: string;
   finished: boolean;
+}
+
+/** Een racekaart die een team voor deze ronde heeft klaargelegd. */
+export interface RacePlay {
+  cardId: string;
+  riderId: string; // eigen renner die de kaart gebruikt
+  targetId?: string; // alleen bij blokkade: de tegenstander
 }
 
 export interface DraftState {
@@ -155,9 +271,16 @@ export interface DraftState {
   idx: number;
 }
 
+export interface RecruitState extends DraftState {
+  market: Candidate[];
+}
+
 export interface StageTeamResult {
   teamId: string;
-  stagePoints: number;
+  kopmanId: string;
+  riderPoints: number; // punten voor de eindstand, kopman dubbel
+  premiePoints: number;
+  stagePoints: number; // riderPoints + premiePoints
   prizeCoins: number;
   sponsorCoins: number;
   bonusCards: string[]; // def-ids
@@ -166,7 +289,8 @@ export interface StageTeamResult {
 
 export interface StageResult {
   stage: number;
-  ranking: { riderId: string; rank: number; points: number }[];
+  ranking: { riderId: string; rank: number; points: number; kopman: boolean }[];
+  premies: Premie[];
   teams: StageTeamResult[];
   lanterneRougeTeamId: string;
   sabotages: { fromTeamId: string; toTeamId: string; def: string }[];
@@ -185,9 +309,18 @@ export interface SeasonResult {
   awards: Award[];
 }
 
+export interface Briefing {
+  page: number;
+  ok: Record<string, boolean>; // teamId -> "ik snap het"
+}
+
 export interface GameState {
   phase: Phase;
   tutorial: boolean;
+  commentary: boolean;
+  briefing: Briefing | null;
+  kopman: Record<string, string>; // teamId -> riderId
+  premies: Premie[];
   round: number;
   stage: number;
   trackLength: number;
@@ -200,8 +333,12 @@ export interface GameState {
   discard: Card[];
   market: Card[];
   draft: DraftState | null;
+  recruit: RecruitState | null;
+  weather: Weather;
   ready: Record<string, boolean>;
   efforts: Record<string, Effort>;
+  cars: Record<string, string>; // teamId -> renner bij wie de volgauto rijdt
+  plays: Record<string, RacePlay[]>; // teamId -> racekaarten voor deze ronde
   locked: Record<string, boolean>;
   offers: Offer[];
   sabotageLog: { fromTeamId: string; toTeamId: string; def: string }[];
@@ -211,6 +348,7 @@ export interface GameState {
   rng: number;
   nextCardId: number;
   nextOfferId: number;
+  nextRiderId: number;
 }
 
 // ---- Wat over de lijn gaat ---------------------------------------------------
@@ -233,6 +371,10 @@ export interface PublicTeam {
 export interface PublicState {
   phase: Phase;
   tutorial: boolean;
+  commentary: boolean;
+  briefing: Briefing | null; // bots staan er al op ok
+  kopman: Record<string, string>; // pas zichtbaar zodra de race begint
+  premies: Premie[];
   round: number;
   stage: number;
   trackLength: number;
@@ -244,6 +386,8 @@ export interface PublicState {
   marketCards: Card[];
   deckCount: number;
   draft: { order: string[]; idx: number; currentTeamId: string | null; total: number } | null;
+  recruit: { order: string[]; idx: number; currentTeamId: string | null; total: number; market: Candidate[] } | null;
+  weather: Weather;
   report: ResolveReport | null;
   stageResult: StageResult | null;
   season: SeasonResult | null;
@@ -253,10 +397,13 @@ export interface PlayerView {
   teamId: string;
   hand: Card[];
   efforts: Record<string, Effort>;
+  car: string | null; // jouw volgauto-keuze voor deze ronde
+  plays: RacePlay[]; // jouw klaargelegde racekaarten
   offersIn: OfferView[];
   offerOut: OfferView | null;
   sabotageOn: string[]; // wat iemand tegen jou inzet: pas bij de uitslag zichtbaar wie
-  pickPending: boolean; // jij bent aan de beurt in de draft
+  pickPending: boolean; // jij bent aan de beurt in de draft of bij het rekruteren
+  kopmanId: string; // jouw kopman voor deze etappe
   stats: TeamStats;
 }
 
@@ -266,9 +413,15 @@ export type PickSource = { kind: 'market'; index: number } | { kind: 'deck' };
 
 export type Action =
   | { type: 'join'; name: string; isBot?: boolean }
+  | { type: 'recruit'; teamId: string; index: number }
   | { type: 'nameRiders'; teamId: string; names: string[] }
   | { type: 'setTutorial'; on: boolean }
+  | { type: 'setCommentary'; on: boolean }
   | { type: 'start' }
+  | { type: 'briefPage'; page: number }
+  | { type: 'briefOk'; teamId: string; on: boolean }
+  | { type: 'briefDone' }
+  | { type: 'kopman'; teamId: string; riderId: string }
   | { type: 'draftPick'; teamId: string; source: PickSource }
   | { type: 'draftSkip'; teamId: string }
   | { type: 'buy'; teamId: string; source: PickSource }
@@ -280,7 +433,7 @@ export type Action =
   | { type: 'respond'; teamId: string; offerId: string; accept: boolean }
   | { type: 'ready'; teamId: string }
   | { type: 'unready'; teamId: string }
-  | { type: 'effort'; teamId: string; efforts: Record<string, Effort> }
+  | { type: 'effort'; teamId: string; efforts: Record<string, Effort>; car?: string | null; plays?: RacePlay[] }
   | { type: 'unlock'; teamId: string }
   | { type: 'next' }
   | { type: 'timeout' }

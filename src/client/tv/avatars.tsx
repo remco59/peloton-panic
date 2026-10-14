@@ -4,6 +4,7 @@ import type { CommentatorId } from '../../shared/content';
 const LOOK: Record<CommentatorId, { bg: string; hair: string; shirt: string; skin: string; long: boolean; moustache: boolean }> = {
   johan: { bg: '#2a3566', hair: '#6b4423', shirt: '#3e63dd', skin: '#f2c9a0', long: false, moustache: true },
   marieke: { bg: '#5a2a38', hair: '#c9822b', shirt: '#e5484d', skin: '#f2c9a0', long: true, moustache: false },
+  fenna: { bg: '#1f4a40', hair: '#3a2a22', shirt: '#2fa37f', skin: '#f2c9a0', long: true, moustache: false },
 };
 
 export function Avatar({ who, speaking }: { who: CommentatorId; speaking: boolean }) {

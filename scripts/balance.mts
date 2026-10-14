@@ -7,11 +7,15 @@ import { CARD_DEFS } from '../src/shared/content';
 import {
   botDraft,
   botEfforts,
+  botRecruit,
+  botRacePlan,
   botStep,
+  canHelp,
   createGame,
   overtrainPenalty,
   perksOf,
   reduce,
+  stageFit,
   teamDefIds,
 } from '../src/shared/engine';
 import { SLOT_LIMITS, STAGES, TRAININGS_PER_RIDER } from '../src/shared/types';
@@ -22,7 +26,45 @@ type Rand = () => number;
 interface Policy {
   name: string;
   step(s: GameState, teamId: string, rand: Rand): Action | null;
-  efforts?: (s: GameState, teamId: string) => Record<string, Effort>;
+  efforts?: (s: GameState, teamId: string, rand: Rand) => Record<string, Effort>;
+  /** Wat de bot naast het tempo doet: standaard alles. */
+  extras?: 'none' | 'car' | 'cards';
+}
+
+/** Zelfde bot, maar knechten helpen nooit of altijd. */
+const noHelp = (s: GameState, teamId: string, rand: Rand) => {
+  const out = botEfforts(s, teamId, rand);
+  for (const k of Object.keys(out)) if (out[k] === 'helpen') out[k] = 'normaal';
+  return out as Record<string, Effort>;
+};
+const allHelp = (s: GameState, teamId: string, rand: Rand) => {
+  const out = botEfforts(s, teamId, rand);
+  const kop = s.kopman[teamId];
+  for (const k of Object.keys(out)) {
+    const r = s.riders.find((x) => x.id === k)!;
+    if (k !== kop && canHelp(s, r)) out[k] = 'helpen';
+  }
+  return out as Record<string, Effort>;
+};
+
+/** Kiest met opzet de renner die het slechtst bij het parcours past als kopman. */
+function worstKopman(inner: Policy['step']): Policy['step'] {
+  return (s, teamId, rand) => {
+    const team = s.teams.find((t) => t.id === teamId)!;
+    const worst = [...team.riderIds]
+      .map((id) => s.riders.find((r) => r.id === id)!)
+      .sort((a, b) => stageFit(a, s.terrain, 0) - stageFit(b, s.terrain, 0))[0];
+    if (s.kopman[teamId] !== worst.id) return { type: 'kopman', teamId, riderId: worst.id };
+    return inner(s, teamId, rand);
+  };
+}
+
+/** De kopman valt elke ronde vol gas aan, de rest rijdt rustig en helpt. */
+function breakaway(s: GameState, teamId: string, rand: Rand): Record<string, Effort> {
+  const out = botEfforts(s, teamId, rand);
+  const kop = s.kopman[teamId];
+  if (kop) out[kop] = 'alles';
+  return out;
 }
 
 const always = (e: Effort) => (s: GameState, teamId: string) =>
@@ -57,7 +99,7 @@ function custom(opts: { train: 'none' | 'safe' | 'max' | 'star'; assets: boolean
           .sort((a, b) => a.fatigue - b.fatigue)[0];
         if (r) return { type: 'train', teamId, cardId: c.id, riderId: r.id };
       }
-      if (opts.assets && d.kind !== 'training' && d.kind !== 'sabotage') {
+      if (opts.assets && d.kind !== 'training' && d.kind !== 'sabotage' && d.kind !== 'race') {
         const slot = team.slots[d.kind as SlotKind];
         if (slot.length < SLOT_LIMITS[d.kind as SlotKind]) return { type: 'install', teamId, cardId: c.id };
       }
@@ -82,6 +124,13 @@ const POLICIES: Policy[] = [
   { name: 'ster (stapelt op 1 renner)', step: custom({ train: 'star', assets: true, buy: true }) },
   { name: 'roekeloos (altijd alles)', step: botStep, efforts: always('alles') },
   { name: 'saai (altijd normaal)', step: botStep, efforts: always('normaal') },
+  { name: 'nooit helpen', step: botStep, efforts: noHelp },
+  { name: 'altijd helpen', step: botStep, efforts: allHelp },
+  { name: 'geen volgauto, geen kaarten', step: botStep, extras: 'none' },
+  { name: 'alleen volgauto', step: botStep, extras: 'car' },
+  { name: 'alleen koerskaarten', step: botStep, extras: 'cards' },
+  { name: 'verkeerde kopman', step: worstKopman(custom({ train: 'safe', assets: true, buy: true })) },
+  { name: 'ontsnapper (kopman altijd alles)', step: botStep, efforts: breakaway },
 ];
 
 function makeRand(seed: number): Rand {
@@ -103,12 +152,30 @@ interface Stats {
   pech: number;
   shielded: number;
   alles: number;
+  helping: number;
+  gels: number;
+  colas: number;
+  blocks: number;
+  cars: number;
   rustig: number;
   normaal: number;
   overtrained: number;
   riderStages: number;
   stageWinnerSpread: number[];
   stageLeaderGap: number[];
+  leftover: number[]; // energie over bij de finish, als deel van het maximum
+  soloLead: number; // rondes waarin de koploper alleen of met z'n tweeën rijdt
+  leadRounds: number;
+  soloWins: number; // etappes die gewonnen worden door een renner die in de slotronde alleen rijdt
+  winMargin: number[];
+  crashes: number;
+  dominoes: number;
+  injured: number;
+  inPeloton: number;
+  alone: number;
+  teamBonus: number;
+  weather: Record<string, number>;
+  crashByWeather: Record<string, { rounds: number; crashes: number }>;
   withDef: Record<string, { n: number; pts: number }>;
   withoutDef: Record<string, { n: number; pts: number }>;
   comeback: { rank: number; won: number; games: number }[]; // rank na etappe 1 (0 = eerste)
@@ -126,6 +193,17 @@ function playSeason(seed: number, order: Policy[], st: Stats): void {
 
   while (s.phase !== 'finished' && guard++ < 3000) {
     switch (s.phase) {
+      case 'briefing':
+        s = reduce(s, { type: 'briefDone' });
+        break;
+      case 'recruit': {
+        const teamId = s.recruit!.order[s.recruit!.idx];
+        s = reduce(s, { type: 'recruit', teamId, index: botRecruit(s, teamId, rand) });
+        break;
+      }
+      case 'naming':
+        for (const t of s.teams) if (s.phase === 'naming') s = reduce(s, { type: 'ready', teamId: t.id });
+        break;
       case 'draft': {
         const teamId = s.draft!.order[s.draft!.idx];
         s = reduce(s, { type: 'draftPick', teamId, source: botDraft(s, teamId, rand) });
@@ -157,24 +235,58 @@ function playSeason(seed: number, order: Policy[], st: Stats): void {
         break;
       }
       case 'race': {
-        for (const t of s.teams)
+        for (const t of s.teams) {
+          const pol = policyOf(t.id);
+          const plan = botRacePlan(s, t.id, rand);
           s = reduce(s, {
             type: 'effort',
             teamId: t.id,
-            efforts: (policyOf(t.id).efforts ?? ((x, id) => botEfforts(x, id, rand) as Record<string, Effort>))(s, t.id),
+            efforts: pol.efforts?.(s, t.id, rand) ?? (pol.extras ? botEfforts(s, t.id, rand) : plan.efforts),
+            car: pol.extras === 'none' || pol.extras === 'cards' ? null : plan.car,
+            plays: pol.extras === 'none' || pol.extras === 'car' ? [] : plan.plays,
           });
+        }
         break;
       }
       case 'resolve': {
         const rep = s.report!;
+        const bucket = (st.crashByWeather[s.weather] ??= { rounds: 0, crashes: 0 });
         for (const m of rep.moves) {
           st.riderRounds++;
+          bucket.rounds++;
+          if (m.crash === 'fall') {
+            st.crashes++;
+            bucket.crashes++;
+          }
+          if (m.crash === 'domino') st.dominoes++;
+          if (m.injured) st.injured++;
+          if (m.groupSize >= 3) st.inPeloton++;
+          else st.alone++;
+          if (m.parts.team > 0) st.teamBonus++;
           if (m.exhausted) st.exhausted++;
           if (m.pech) st.pech++;
           if (m.shielded) st.shielded++;
+          if (m.helping) st.helping++;
+          if (m.item === 'gel') st.gels++;
+          if (m.item === 'cola') st.colas++;
+          if (m.item === 'blok') st.blocks++;
+          if (m.car) st.cars++;
           if (m.effort === 'alles') st.alles++;
           else if (m.effort === 'rustig') st.rustig++;
           else st.normaal++;
+        }
+        {
+          const top = [...rep.moves].sort((a, b) => b.to - a.to);
+          st.leadRounds++;
+          if (top[0].groupSize <= 2 && top[0].to - [...rep.moves].sort((a, b) => b.from - a.from)[2].from >= 3) st.soloLead++;
+          if (rep.finished) {
+            st.winMargin.push(top[0].to - top[1].to);
+            for (const m of rep.moves) {
+              const r = s.riders.find((x) => x.id === m.riderId)!;
+              st.leftover.push(m.energyAfter / Math.max(1, r.maxEnergy));
+            }
+            if (top[0].groupSize <= 2) st.soloWins++;
+          }
         }
         if (rep.finished) {
           st.rounds.push(rep.round);
@@ -186,7 +298,7 @@ function playSeason(seed: number, order: Policy[], st: Stats): void {
       }
       case 'results': {
         const res = s.stageResult!;
-        const tracked = Object.keys(CARD_DEFS).filter((d) => !['training', 'sabotage'].includes(CARD_DEFS[d].kind));
+        const tracked = Object.keys(CARD_DEFS).filter((d) => !['training', 'sabotage', 'race'].includes(CARD_DEFS[d].kind));
         for (const t of res.teams) {
           const have = new Set(installed[t.teamId] ?? []);
           for (const d of tracked) {
@@ -196,6 +308,7 @@ function playSeason(seed: number, order: Policy[], st: Stats): void {
             bucket[d].pts += t.stagePoints;
           }
         }
+        st.weather[s.weather] = (st.weather[s.weather] ?? 0) + 1;
         if (res.stage === 1) {
           const order = [...res.teams].sort((a, b) => b.totalPoints - a.totalPoints);
           rankAfterOne = Object.fromEntries(order.map((t, i) => [t.teamId, i]));
@@ -245,12 +358,30 @@ const st: Stats = {
   pech: 0,
   shielded: 0,
   alles: 0,
+  helping: 0,
+  gels: 0,
+  colas: 0,
+  blocks: 0,
+  cars: 0,
   rustig: 0,
   normaal: 0,
   overtrained: 0,
   riderStages: 0,
   stageWinnerSpread: [],
   stageLeaderGap: [],
+  leftover: [],
+  soloLead: 0,
+  leadRounds: 0,
+  soloWins: 0,
+  winMargin: [],
+  crashes: 0,
+  dominoes: 0,
+  injured: 0,
+  inPeloton: 0,
+  alone: 0,
+  teamBonus: 0,
+  weather: {},
+  crashByWeather: {},
   withDef: {},
   withoutDef: {},
   comeback: Array.from({ length: 4 }, (_, rank) => ({ rank, won: 0, games: 0 })),
@@ -286,7 +417,46 @@ console.log('  rondes per etappe: gem', avg(st.rounds).toFixed(1), 'min', Math.m
 console.log('  op de fles:', pct(st.exhausted, st.riderRounds), 'van alle renner-rondes');
 console.log('  pech:', pct(st.pech, st.riderRounds), '(opgevangen door reservefiets:', pct(st.shielded, st.riderRounds) + ')');
 console.log('  tempo: rustig', pct(st.rustig, st.riderRounds), 'normaal', pct(st.normaal, st.riderRounds), 'alles', pct(st.alles, st.riderRounds));
+console.log('  knechten die helpen:', pct(st.helping, st.riderRounds), 'van alle renner-rondes');
+console.log(
+  '  koerskaarten per etappe (4 teams): gel',
+  (st.gels / (N * STAGES)).toFixed(1),
+  'cola',
+  (st.colas / (N * STAGES)).toFixed(1),
+  'blok',
+  (st.blocks / (N * STAGES)).toFixed(1),
+  '· volgauto bij',
+  pct(st.cars, st.riderRounds),
+  'van alle renner-rondes',
+);
+console.log(
+  '  valpartijen:',
+  pct(st.crashes, st.riderRounds),
+  'van alle renner-rondes (domino',
+  pct(st.dominoes, st.riderRounds) + ', zware val',
+  pct(st.injured, st.riderRounds) + ')',
+);
+for (const [w, b] of Object.entries(st.crashByWeather))
+  console.log(`    bij ${w}: ${pct(b.crashes, b.rounds)} per renner-ronde (${st.weather[w] ?? 0} etappes)`);
+console.log(
+  '  in een peloton (>=3):',
+  pct(st.inPeloton, st.riderRounds),
+  '· alleen of met z\'n tweeën:',
+  pct(st.alone, st.riderRounds),
+  '· teamwerk-bonus:',
+  pct(st.teamBonus, st.riderRounds),
+);
 console.log('  overtraind bij start race:', pct(st.overtrained, st.riderStages), 'van alle renner-etappes');
+console.log(
+  '  koploper alleen weg (>=3 voor de rest):',
+  pct(st.soloLead, st.leadRounds),
+  'van de rondes · etappewinnaar reed alleen/met z\'n tweeën:',
+  pct(st.soloWins, st.winMargin.length),
+  '· marge winnaar op nummer 2: gem',
+  avg(st.winMargin).toFixed(1),
+  'tegels',
+);
+console.log('  energie over bij de finish: gem', (100 * avg(st.leftover)).toFixed(0) + '% van het maximum');
 console.log('  voorsprong leider op mediaan bij finish: gem', avg(st.stageLeaderGap).toFixed(1), 'tegels');
 
 console.log('\nWie wint het seizoen, gerekend vanaf de stand na etappe 1 (25% = gelijk)');

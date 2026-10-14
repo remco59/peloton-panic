@@ -1,0 +1,222 @@
+/* Playing cards. Everything is sized in cqw so one design scales from phone grid to TV market. */
+.gc {
+  --paper: #f7f2e6;
+  --ink: #1b1d2a;
+  container-type: inline-size;
+  display: block;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 5 / 7;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  transform: rotate(var(--tilt, 0deg));
+  transition: transform 0.15s ease-out, opacity 0.15s;
+  animation: gc-deal 0.5s cubic-bezier(0.2, 0.85, 0.25, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+.gc.dim {
+  opacity: 0.5;
+  filter: saturate(0.6);
+}
+.gc.tap {
+  cursor: pointer;
+}
+.gc.tap:active {
+  transform: scale(0.96);
+}
+@media (hover: hover) {
+  .gc.tap:hover {
+    transform: translateY(-2%) rotate(0deg);
+  }
+}
+
+.gc-frame {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 4.5cqw;
+  border-radius: 8cqw;
+  overflow: hidden;
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--k) 70%, #fff) 0%,
+    var(--k) 45%,
+    color-mix(in srgb, var(--k) 55%, #000) 100%
+  );
+  box-shadow:
+    0 2.4cqw 5cqw -1cqw rgba(0, 0, 0, 0.6),
+    0 0.6cqw 1.6cqw rgba(0, 0, 0, 0.4),
+    inset 0 0.5cqw 0 rgba(255, 255, 255, 0.5);
+}
+/* Glossy sheen across the whole card. */
+.gc-frame::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(115deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0) 38%);
+  pointer-events: none;
+}
+
+.gc-face {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3cqw;
+  padding: 4cqw;
+  border-radius: 4.5cqw;
+  background: var(--paper);
+  box-shadow:
+    inset 0 0 0 0.5cqw rgba(0, 0, 0, 0.14),
+    inset 0 -3cqw 6cqw -3cqw rgba(0, 0, 0, 0.14);
+}
+
+.gc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 7cqw;
+}
+.gc-kind,
+.gc-foot {
+  font-size: 6cqw;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--k) 50%, #000);
+}
+.gc-cost {
+  flex: none;
+  width: 15cqw;
+  height: 15cqw;
+  margin: -3cqw -3cqw -5cqw 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 7cqw;
+  font-weight: 800;
+  color: #3a2a00;
+  background: radial-gradient(circle at 35% 30%, #fff3b8, var(--accent) 55%, #d99f00);
+  box-shadow:
+    inset 0 0 0 1cqw rgba(120, 80, 0, 0.3),
+    0 0.8cqw 1.8cqw rgba(0, 0, 0, 0.35);
+}
+
+.gc-art {
+  flex: 1 1 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 3.5cqw;
+  background:
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0 2.5cqw, rgba(255, 255, 255, 0) 2.5cqw 5cqw),
+    radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--k) 35%, #fff), color-mix(in srgb, var(--k) 85%, #000));
+  box-shadow:
+    inset 0 0 0 0.5cqw rgba(0, 0, 0, 0.22),
+    inset 0 1.5cqw 4cqw rgba(255, 255, 255, 0.3);
+  overflow: hidden;
+}
+.gc-glyph {
+  font-size: 30cqw;
+  line-height: 1;
+  filter: drop-shadow(0 1.5cqw 1.2cqw rgba(0, 0, 0, 0.35));
+}
+
+.gc-name {
+  font-size: 9.5cqw;
+  font-weight: 800;
+  line-height: 1.12;
+  text-align: center;
+}
+.gc-text {
+  font-size: 6.3cqw;
+  line-height: 1.3;
+  text-align: center;
+  color: rgba(27, 29, 42, 0.72);
+}
+.gc-foot {
+  align-self: flex-end;
+  font-size: 4.6cqw;
+  opacity: 0.55;
+  transform: rotate(180deg);
+}
+
+/* Compact face for the phone grid: no rules text, tap for the full card. */
+.gc.sm .gc-text,
+.gc.sm .gc-foot {
+  display: none;
+}
+.gc.sm .gc-glyph {
+  font-size: 38cqw;
+}
+.gc.sm .gc-name {
+  font-size: 9.4cqw;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.gc.sm .gc-cost {
+  width: 17cqw;
+  height: 17cqw;
+  font-size: 8.5cqw;
+}
+
+/* Draw pile. */
+.gc.back .gc-frame {
+  background: linear-gradient(150deg, #3b4378, #151936);
+}
+.gc-backface {
+  flex: 1;
+  display: grid;
+  place-content: center;
+  gap: 4cqw;
+  text-align: center;
+  border-radius: 4.5cqw;
+  border: 1cqw solid rgba(255, 200, 61, 0.85);
+  background: repeating-linear-gradient(45deg, #1b2144 0 3cqw, #262d5a 3cqw 6cqw);
+  box-shadow: inset 0 0 0 1.5cqw rgba(0, 0, 0, 0.25);
+}
+.gc-logo {
+  font-size: 26cqw;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--accent);
+}
+.gc-count {
+  font-size: 6.5cqw;
+  font-weight: 700;
+  color: rgba(243, 244, 248, 0.8);
+}
+
+/* Phone detail sheet. */
+.gc-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.gc-detail-card {
+  width: min(62vw, 250px);
+  margin: 4px auto 6px;
+}
+
+@keyframes gc-deal {
+  from {
+    opacity: 0;
+    transform: translateY(6%) rotate(-6deg) scale(0.92);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gc {
+    animation: none;
+    transition: none;
+  }
+}
