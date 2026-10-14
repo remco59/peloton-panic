@@ -1,0 +1,33 @@
+{
+  "name": "peloton-panic",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Couch board game: TV is the table, phones are the hand. Manage a cycling team.",
+  "scripts": {
+    "dev": "tsx watch src/server/index.ts",
+    "start": "npm run build && NODE_ENV=production tsx src/server/index.ts",
+    "build": "vite build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "setup:tts": "bash scripts/setup-tts.sh",
+    "screenshots": "tsx scripts/screenshots.mts"
+  },
+  "dependencies": {
+    "@fontsource/press-start-2p": "^5.3.0",
+    "express": "^5.3.0",
+    "preact": "^11.0.1",
+    "qrcode": "^1.5.4",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.5",
+    "@types/qrcode": "^1.5.6",
+    "@types/ws": "^8.18.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.4"
+  }
+}

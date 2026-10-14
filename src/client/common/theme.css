@@ -1,0 +1,60 @@
+:root {
+  --bg: #0f1224;
+  --panel: #1a1f3a;
+  --panel-2: #262d52;
+  --line: #3a4375;
+  --ink: #f6f1e4;
+  --muted: #98a2cc;
+  --accent: #ffd23f;
+  --good: #5eea8d;
+  --bad: #ff6b6b;
+  --sky: #7ec8f2;
+  --px: 4px;
+  --pixel: 'Press Start 2P', ui-monospace, 'SF Mono', Menlo, monospace;
+  --body: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+#app {
+  height: 100%;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--body);
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+.pixel {
+  font-family: var(--pixel);
+  letter-spacing: 0;
+  line-height: 1.5;
+}
+
+/* A chunky, pixel-style frame: stepped corners made from box-shadows. */
+.frame {
+  background: var(--panel);
+  border: var(--px) solid var(--line);
+  box-shadow: 0 var(--px) 0 0 #070914;
+}
+
+.chip {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  border: 2px solid rgba(0, 0, 0, 0.5);
+  vertical-align: -0.1em;
+}
