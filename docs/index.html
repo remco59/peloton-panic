@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Peloton Panic: bankhangspel met de tv als tafel</title>
+<meta name="description" content="Een bankhangspel voor 2 tot 6 spelers. De tv is het speelbord, jullie telefoons zijn je hand. Manage een wielerploeg door een seizoen van drie etappes.">
+<meta property="og:title" content="Peloton Panic">
+<meta property="og:description" content="De tv is het speelbord, jullie telefoons zijn je hand. Manage een wielerploeg en voorkom de rode lantaarn.">
+<meta property="og:image" content="screenshots/tv-5-resolve.png">
+<style>
+  :root {
+    --bg: #0b0e17;
+    --panel: #141827;
+    --panel-2: #1b2033;
+    --line: #272d44;
+    --text: #f2f4fa;
+    --muted: #9aa1bd;
+    --accent: #ffc93c;
+    --accent-ink: #2a2005;
+    --green: #46dd86;
+    --red: #ff6464;
+    --blue: #6e9bff;
+    --sand: #d9b277;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); }
+  img { display: block; max-width: 100%; height: auto; }
+  .wrap { width: min(1080px, 100% - 32px); margin-inline: auto; }
+
+  header.top { padding: 20px 0; }
+  header.top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .brand { font-weight: 800; letter-spacing: .04em; color: var(--accent); text-decoration: none; }
+  .top a.gh { color: var(--muted); text-decoration: none; font-size: 15px; }
+  .top a.gh:hover { color: var(--text); }
+
+  .hero { padding: 40px 0 64px; text-align: center; }
+  .eyebrow {
+    display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); border: 1px solid #5a4a14; background: #2a2208; padding: 6px 12px; border-radius: 999px;
+  }
+  h1 { font-size: clamp(40px, 8vw, 84px); line-height: 1.02; margin: 20px 0 16px; letter-spacing: -.02em; }
+  h1 span { color: var(--accent); }
+  .lead { max-width: 640px; margin: 0 auto 32px; color: var(--muted); font-size: clamp(17px, 2.4vw, 20px); }
+  .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; padding: 12px 22px; border-radius: 12px; font-weight: 700; text-decoration: none;
+    background: var(--accent); color: var(--accent-ink);
+  }
+  .btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  .btn:hover { filter: brightness(1.08); }
+  .hero-shot {
+    margin-top: 48px; border-radius: 18px; overflow: hidden; border: 1px solid var(--line);
+    box-shadow: 0 30px 80px -30px rgba(0,0,0,.8);
+  }
+
+  section { padding: 56px 0; }
+  h2 { font-size: clamp(26px, 4vw, 36px); line-height: 1.15; margin: 0 0 12px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin: 0 0 32px; max-width: 640px; }
+
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; padding: 0; margin: 0; list-style: none; counter-reset: s; }
+  .steps li {
+    counter-increment: s; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px;
+  }
+  .steps li::before { content: counter(s); display: block; font-size: 32px; font-weight: 800; color: var(--accent); line-height: 1; margin-bottom: 10px; }
+  .steps h3 { margin: 0 0 6px; font-size: 19px; }
+  .steps p { margin: 0; color: var(--muted); font-size: 15.5px; }
+
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: center; }
+  .split.rev .copy { order: 2; }
+  .shot { border-radius: 14px; overflow: hidden; border: 1px solid var(--line); }
+  figure { margin: 0; }
+  figcaption { color: var(--muted); font-size: 14px; margin-top: 10px; }
+
+  .phones { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+  .phones .shot { aspect-ratio: 9 / 16; }
+  .phones img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; }
+  .card h3 { margin: 0 0 6px; font-size: 18px; }
+  .card p { margin: 0; color: var(--muted); font-size: 15.5px; }
+  .tag { font-size: 11.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+  .t-green { color: var(--green); } .t-red { color: var(--red); } .t-blue { color: var(--blue); }
+  .t-sand { color: var(--sand); } .t-accent { color: var(--accent); }
+
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+  th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 15.5px; }
+  th { width: 150px; }
+  tr:last-child th, tr:last-child td { border-bottom: 0; }
+  td { color: var(--muted); }
+
+  .note {
+    background: #2a2208; border: 1px solid #5a4a14; border-left: 4px solid var(--accent);
+    border-radius: 14px; padding: 18px 20px; color: #e9dcae;
+  }
+  .note strong { color: var(--accent); }
+  pre {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px;
+    overflow-x: auto; font: 14.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: #dfe4f7; margin: 16px 0;
+  }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; background: var(--panel-2); padding: 1px 6px; border-radius: 6px; }
+  pre code { background: none; padding: 0; }
+
+  footer { border-top: 1px solid var(--line); padding: 28px 0 48px; color: var(--muted); font-size: 14.5px; }
+
+  @media (max-width: 760px) {
+    .split, .split.rev { grid-template-columns: 1fr; }
+    .split.rev .copy { order: 0; }
+    section { padding: 40px 0; }
+    th { width: 110px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#">PELOTON PANIC</a>
+    <a class="gh" href="https://github.com/remco59/peloton-panic">Broncode op GitHub →</a>
+  </div>
+</header>
+
+<main>
+  <div class="hero">
+    <div class="wrap">
+      <span class="eyebrow">2 tot 6 spelers · tv + telefoons</span>
+      <h1>Wie krijgt de <span>rode lantaarn</span>?</h1>
+      <p class="lead">Een bankhangspel waarbij de tv het speelbord is en jullie telefoons je hand. Je managet een ploeg van drie renners door een seizoen van drie etappes.</p>
+      <div class="cta">
+        <a class="btn" href="#zelf-spelen">Zelf spelen</a>
+        <a class="btn ghost" href="#hoe-het-werkt">Hoe het werkt</a>
+      </div>
+      <div class="hero-shot">
+        <img src="screenshots/tv-5-resolve.png" alt="De race op de tv: renners op het parcours, het klassement rechts en de commentatoren onderaan" width="1920" height="1080">
+      </div>
+    </div>
+  </div>
+
+  <section id="hoe-het-werkt">
+    <div class="wrap">
+      <h2>Hoe een etappe werkt</h2>
+      <p class="sub">Kaarten kiezen, renners trainen, spullen inkopen en dan een simpele race waarin jouw voorbereiding het verschil maakt.</p>
+      <ol class="steps">
+        <li>
+          <h3>Draft</h3>
+          <p>Op de tv ligt een markt van 5 kaarten. Om de beurt pak je er een, of een onbekende van de stapel. Het team onderaan het klassement begint.</p>
+        </li>
+        <li>
+          <h3>Voorbereiding</h3>
+          <p>Train je renners, leg spullen op je bord, koop kaarten met munten, ruil met anderen of saboteer iemand (licht).</p>
+        </li>
+        <li>
+          <h3>Race</h3>
+          <p>Elke ronde kies je per renner <em>Rustig</em>, <em>Normaal</em> of <em>Alles geven</em>. Drafting, wind en pech doen de rest.</p>
+        </li>
+        <li>
+          <h3>Uitslag</h3>
+          <p>Punten voor de top zes (de slotetappe telt dubbel), munten, bonuskaarten voor het podium en een troostkaart voor de rode lantaarn.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap split">
+      <div class="copy">
+        <h2>De tv is het bord</h2>
+        <p class="sub" style="margin-bottom:0">De markt, de teams en het klassement staan groot in beeld. Twee commentatoren, Johan en Marieke, vertellen in het Nederlands wat er gebeurt en wie er aan de beurt is.</p>
+      </div>
+      <figure>
+        <div class="shot"><img src="screenshots/tv-2-draft.png" alt="Draft op de tv: vijf kaarten op de markt" width="1920" height="1080" loading="lazy"></div>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap split rev">
+      <div class="copy">
+        <h2>Je telefoon is je hand</h2>
+        <p class="sub" style="margin-bottom:0">Scan de QR-code op de tv en je zit erin. Op je telefoon kies je kaarten, train je en bepaal je het tempo van je renners. Niemand ziet wat jij in handen hebt.</p>
+      </div>
+      <div class="phones" style="grid-template-columns: repeat(3, 1fr); gap: 12px;">
+        <div class="shot" style="aspect-ratio: 9/16"><img src="screenshots/phone-2-draft.png" alt="Draft op de telefoon" loading="lazy" style="width:100%;height:100%;object-fit:cover;object-position:top"></div>
+        <div class="shot" style="aspect-ratio: 9/16"><img src="screenshots/phone-3-kaarten.png" alt="Kaarten op de telefoon" loading="lazy" style="width:100%;height:100%;object-fit:cover;object-position:top"></div>
+        <div class="shot" style="aspect-ratio: 9/16"><img src="screenshots/phone-5-race.png" alt="Tempo kiezen op de telefoon" loading="lazy" style="width:100%;height:100%;object-fit:cover;object-position:center"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Train, maar niet te veel</h2>
+      <p class="sub">Training maakt een renner sterker, maar vervaagt na elke etappe met 1 per eigenschap. Elke training kost vermoeidheid. Is die te hoog, dan ben je overtraind en word je juist zwakker. Een rustdag of fysiotherapeut helpt.</p>
+      <div class="shot"><img src="screenshots/tv-3-team.png" alt="Voorbereiding op de tv: renners met eigenschappen per team" width="1920" height="1080" loading="lazy"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Spullen</h2>
+      <p class="sub">Zes soorten kaarten. Sabotage is altijd een lichte hinder, nooit uitschakeling.</p>
+      <table>
+        <tr><th><span class="tag t-green">Training</span></th><td>Duurloop, Krachttraining, Klimstage, Hoogtestage, Trainingskamp, Rustdag</td></tr>
+        <tr><th><span class="tag t-accent">Sponsor</span></th><td>Bakkerij, Regiobank, Energiedrank (munten per etappe)</td></tr>
+        <tr><th><span class="tag t-blue">Staf</span></th><td>Mecanicien, Soigneur, Ploegleider, Voedingsdeskundige, Fysio</td></tr>
+        <tr><th><span class="tag t-sand">Materiaal</span></th><td>Reservefiets, Aero-wielen, Lichte klimfiets</td></tr>
+        <tr><th><span class="tag" style="color:#c3a0ff">Wagen</span></th><td>Volgauto, Teambus</td></tr>
+        <tr><th><span class="tag t-red">Sabotage</span></th><td>Spijkers op de weg, Verwisselde bidons</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap split">
+      <div class="copy">
+        <h2>Uitslag en eindstand</h2>
+        <p class="sub" style="margin-bottom:0">Na elke etappe punten, munten en bonussen. Aan het eind van het seizoen deelt het spel prijzen uit: meest aanvallend, vol gas, beste voorbereiding, spaarvarken en natuurlijk de lanterne rouge.</p>
+      </div>
+      <figure>
+        <div class="shot"><img src="screenshots/tv-7-finish.png" alt="Eindstand van het seizoen met bijzondere prijzen" width="1920" height="1080" loading="lazy"></div>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Tutorial-modus</h2>
+      <p class="sub">De president zet de tutorial aan in de lobby. Er is geen apart spel: iedereen speelt gewoon mee, tegen elkaar of tegen bots.</p>
+      <div class="cards">
+        <div class="card"><span class="tag t-accent">Telefoon</span><h3>Uitlegkaart per fase</h3><p>Boven elk scherm staat uitleg die past bij wat je nu doet. Met <em>Begrepen</em> klap je hem dicht.</p></div>
+        <div class="card"><span class="tag t-accent">Tv</span><h3>Instructiekaart</h3><p>Zegt wat er nu van de spelers wordt verwacht.</p></div>
+        <div class="card"><span class="tag t-accent">Commentatoren</span><h3>Uitleg in korte blokken</h3><p>Elk onderwerp één keer: draft, voorbereiding, training, ruilen, tempo, drafting en uitslag.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="zelf-spelen">
+    <div class="wrap">
+      <h2>Zelf spelen</h2>
+      <p class="sub">Peloton Panic draait op een eigen server op je computer. Telefoons verbinden via wifi.</p>
+      <div class="note">
+        <strong>Let op:</strong> deze pagina is een etalage. Het spel zelf heeft een server met WebSockets nodig en draait daarom niet op GitHub Pages.
+      </div>
+      <pre><code>git clone https://github.com/remco59/peloton-panic.git
+cd peloton-panic
+npm install
+npm run setup:tts   # optioneel: commentatorstemmen via edge-tts
+npm run dev</code></pre>
+      <ul style="color:var(--muted); padding-left: 20px;">
+        <li>Open <code>http://localhost:3000</code> op de computer of tv.</li>
+        <li>Scan de QR-code met je telefoon. Telefoons moeten op hetzelfde wifi zitten.</li>
+        <li>De eerste speler die meedoet is de president en start het seizoen.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    Peloton Panic · <a href="https://github.com/remco59/peloton-panic">broncode</a> · gemaakt voor de bank, niet voor de Tour.
+  </div>
+</footer>
+
+</body>
+</html>
