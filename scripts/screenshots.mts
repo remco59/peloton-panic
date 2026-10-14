@@ -15,7 +15,7 @@ import type { Effort, PlayerView, PublicState } from '../src/shared/types';
 const BASE = process.env.PP_URL ?? 'http://localhost:3000';
 const WS = BASE.replace(/^http/, 'ws') + '/ws';
 const CHROME = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const OUT = join(process.cwd(), 'docs', 'screenshots');
+const OUT = process.env.PP_OUT ?? join(process.cwd(), 'docs', 'screenshots');
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function capture(name: string, url: string, w: number, h: number, scale: number, waitMs: number): Promise<void> {
@@ -136,7 +136,7 @@ async function main() {
         me.act({ type: 'train', cardId: c.id, riderId: r.id });
         return true;
       }
-      if (d.kind !== 'sabotage') {
+      if (d.kind !== 'sabotage' && d.kind !== 'race') {
         const slot = mine.slots[d.kind as 'sponsor' | 'staff' | 'material' | 'car'];
         const limit = d.kind === 'car' ? 1 : 2;
         if (slot.length < limit) {

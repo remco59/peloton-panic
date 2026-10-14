@@ -184,12 +184,31 @@ gehaald, controleer de licentie ervan voordat je het spel publiek verspreidt.
 ```
 src/shared/   regelmotor (pure reducer), inhoud, commentaar, protocol
 src/server/   kamers, WebSocket-server, bots, TTS
-src/client/   tv/ (canvas-parcours + panelen) en play/ (telefoon)
+src/client/   tv/ (canvas-parcours + panelen), play/ (telefoon) en common/ (kaarten, visuals)
 scripts/      setup-tts.sh, screenshots.mts, build-audio.py
 ```
 
 De regels zijn `(state, action) -> state` in `src/shared/engine.ts`, dus een heel seizoen is
 deterministisch vanaf een seed en gedekt door `npm test`.
+
+## Visueel in plaats van tekst
+
+Alles wat je in één oogopslag moet snappen is getekend (SVG en CSS, geen losse plaatjes), in
+`src/client/common/visuals.tsx`:
+
+- **Renner-avatars**: elke renner krijgt een eigen gezicht (huid, haar, baard, bril) uit zijn id,
+  met helm en shirt in de kleuren van de ploeg. Het type bepaalt de helm: een klimmer draagt een
+  koerspetje, een sprinter een aerovizier, een knecht een bril en zweetband.
+- **Podium**: in de etappe-uitslag en de eindstand staat de beste renner van elke ploeg
+  echt op de 1e, 2e en 3e trede, met medaille, trofee en confetti.
+- **Scorebord**: de koers toont avatars die langs de baan schuiven, een kroon voor de leider en een
+  energiebatterij per renner. Het klassement toont de ploeg als drie hoofden, munten als stapeltje
+  en handkaarten als waaiertje.
+- **Parcoursprofiel**: een berglandschap met klimmen, afdalingen en kasseien, de premievlaggen en de
+  renners er zelf op.
+- **Eigenschappen**: iconen bij elke eigenschap en een vlieger-diagram (radar) op de renner-kaartjes.
+- **Overig**: een icoon bij elke gebeurtenis, een type- en eigenaardigheidsbadge per renner, een
+  ploegshirt in de lobby.
 
 ## Commando's
 

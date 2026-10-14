@@ -32,7 +32,25 @@ import { Broadcaster } from './broadcast';
 import type { Caption } from './broadcast';
 import { Avatar } from './avatars';
 import { CardBack, PlayingCard } from '../common/card';
-import { TrackRenderer, terrainColor, H, W } from './render';
+import {
+  Battery,
+  Coins,
+  Crown,
+  ElevationProfile,
+  EVENT_ICON,
+  HandFan,
+  Medal,
+  Podium,
+  QuirkTag,
+  RiderAvatar,
+  StatIcon,
+  StatRadar,
+  TeamJersey,
+  TeamStack,
+  TypeBadge,
+} from '../common/visuals';
+import type { PodiumEntry } from '../common/visuals';
+import { TrackRenderer, H, W } from './render';
 import { Soundtrack } from './soundtrack';
 
 type Snapshot = { state: PublicState; feed: FeedBatch[] } & RoomInfo;
@@ -311,7 +329,10 @@ function EventCard({ state }: { state: PublicState }) {
   return (
     <div class={`event frame ${def.silly ? 'silly' : ''}`}>
       <div class="tag ty">{def.silly ? 'NIEUWS' : 'OMSTANDIGHEDEN'}</div>
-      <div class="title ty">{def.title}</div>
+      <div class="ev-head">
+        <span class="ev-icon" aria-hidden="true">{EVENT_ICON[def.id]}</span>
+        <div class="title ty">{def.title}</div>
+      </div>
       <p>{def.blurb}</p>
       <p class={`weather ${state.weather}`}>
         {WEATHER[state.weather].icon} {WEATHER[state.weather].label}
@@ -324,13 +345,7 @@ function EventCard({ state }: { state: PublicState }) {
 }
 
 function EnergyBar({ value, max }: { value: number; max: number }) {
-  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
-  const tone = pct <= 25 ? 'low' : pct <= 55 ? 'mid' : 'high';
-  return (
-    <span class="ebar" title={`${value}/${max}`}>
-      <span class={`fill ${tone}`} style={{ width: `${pct}%` }} />
-    </span>
-  );
+  return <Battery value={value} max={max} />;
 }
 
 /** De koers renner voor renner: plek, tegel en hoe ver ze van de kop en van elkaar liggen. */
@@ -350,6 +365,7 @@ function Ladder({ snap }: { snap: Snapshot }) {
         const col = colorOf(team);
         const tied = i > 0 && row.gapAhead === 0;
         const r = row.rider;
+        const left = span > 0 ? (1 - row.gapLeader / span) * 100 : 100;
         return (
           <div key={r.id}>
             {i > 0 && row.gapAhead > 0 && (
@@ -357,16 +373,22 @@ function Ladder({ snap }: { snap: Snapshot }) {
                 <span>{rows.length > 9 && row.gapAhead < 2 ? '' : tiles(row.gapAhead)}</span>
               </div>
             )}
-            <div class={`lrow ${row.rank === 1 ? 'first' : ''} ${tied ? 'tied' : ''}`}>
-              <span class="rk ty">{tied ? '' : row.rank}</span>
-              <span class="chip" style={{ background: col.hex }} />
+            <div class={`lrow ${row.rank === 1 ? 'first' : ''} ${tied ? 'tied' : ''}`} style={{ '--c': col.hex }}>
+              <span class="rk ty">{tied ? '' : row.rank === 1 ? <Crown size={18} /> : row.rank}</span>
+              <span class="av">
+                <RiderAvatar rider={r} color={team.color} size="100%" />
+              </span>
               <span class="nm">
                 {kopmen.has(r.id) && <span class="star">★</span>}
                 {r.name.split(' ')[0]} <i class="tm">{team.name}</i>
               </span>
               <span class="bar">
-                <span class="dotp" style={{ left: `${span > 0 ? (1 - row.gapLeader / span) * 100 : 100}%`, background: col.hex }} />
+                <span class="fillp" style={{ width: `${left}%`, background: col.hex }} />
+                <span class="dotp" style={{ left: `${left}%` }}>
+                  <RiderAvatar rider={r} color={team.color} size="100%" />
+                </span>
               </span>
+              <Battery value={r.energy} max={r.maxEnergy} />
               <span class="tl ty">{row.tile}</span>
               <span class={`gl ty ${row.gapLeader === 0 ? 'ok' : ''}`}>{row.gapLeader === 0 ? 'KOP' : `−${row.gapLeader}`}</span>
             </div>
@@ -381,49 +403,40 @@ function Standings({ snap }: { snap: Snapshot }) {
   const { state } = snap;
   const racing = state.phase === 'race' || state.phase === 'resolve' || state.phase === 'results';
   if (racing) return <Ladder snap={snap} />;
-  const rows = state.teams
-    .map((t) => ({ t, best: Math.max(0, ...ridersOf(state, t.id).map((r) => r.pos)) }))
-    .sort((a, b) => (racing ? b.best - a.best : b.t.points - a.t.points));
+  const rows = [...state.teams].sort((a, b) => b.points - a.points);
+  const maxPts = Math.max(1, ...rows.map((t) => t.points));
   return (
     <div class="standings frame">
-      <div class="tag ty">{racing ? 'KOERS' : 'KLASSEMENT'}</div>
-      {rows.map(({ t, best }, i) => {
+      <div class="tag ty">KLASSEMENT</div>
+      {rows.map((t, i) => {
         const col = colorOf(t);
         let waiting = '';
-        if (state.phase === 'race') waiting = t.locked ? 'KLAAR' : 'KIEST';
-        else if (state.phase === 'team') waiting = t.ready ? 'KLAAR' : 'BEZIG';
-        else if (state.phase === 'draft')
-          waiting = state.draft?.currentTeamId === t.id ? 'AAN DE BEURT' : '';
+        if (state.phase === 'team') waiting = t.ready ? 'KLAAR' : 'BEZIG';
+        else if (state.phase === 'draft') waiting = state.draft?.currentTeamId === t.id ? 'AAN DE BEURT' : '';
+        const turn = waiting === 'AAN DE BEURT';
+        const rs = ridersOf(state, t.id);
         return (
-          <div class="row" key={t.id}>
-            <span class="rank ty">{i + 1}</span>
-            <span class="chip" style={{ background: col.hex }} />
+          <div class={`row ${turn ? 'turn' : ''}`} key={t.id} style={{ '--c': col.hex }}>
+            <span class="rank">
+              <Medal place={i + 1} size={26} />
+            </span>
+            {rs.length > 0 ? <TeamStack riders={rs} color={t.color} size={32} /> : <span class="chip" style={{ background: col.hex }} />}
             <div class="who">
               <div class="name">
                 {t.name}
                 {t.isBot && <span class="bot"> bot</span>}
                 {!snap.connected[t.id] && <span class="bad"> weg</span>}
               </div>
-              {racing ? (
-                <div class="riders">
-                  {ridersOf(state, t.id).map((r) => (
-                    <span key={r.id} class="rr" title={QUIRKS[r.quirk].label}>
-                      {state.kopman[t.id] === r.id && <span class="star">★</span>}
-                      {r.name.split(' ')[0]} <i>{Math.floor(r.pos)}</i>
-                      <EnergyBar value={r.energy} max={r.maxEnergy} />
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <div class="riders">
-                  <span>
-                    {t.coins} munten · {t.handCount} kaarten
-                  </span>
-                </div>
-              )}
+              <div class="riders">
+                <Coins n={t.coins} />
+                <HandFan n={t.handCount} />
+                <span class={`state ty ${waiting === 'KLAAR' || turn ? 'ok' : ''}`}>{waiting}</span>
+              </div>
+              <span class="ptsbar">
+                <i style={{ width: `${(t.points / maxPts) * 100}%` }} />
+              </span>
             </div>
-            <span class={`state ty ${waiting === 'KLAAR' || waiting === 'AAN DE BEURT' ? 'ok' : ''}`}>{waiting}</span>
-            <span class="best ty">{racing ? Math.floor(best) : t.points}</span>
+            <span class="best ty">{t.points}</span>
           </div>
         );
       })}
@@ -432,35 +445,23 @@ function Standings({ snap }: { snap: Snapshot }) {
 }
 
 function Minimap({ state }: { state: PublicState }) {
-  const n = state.trackLength;
   const racing = state.phase === 'race' || state.phase === 'resolve' || state.phase === 'results';
   const rows = racing ? standing(state) : [];
-  // Renners op dezelfde tegel krijgen een eigen rij, zodat niemand achter een ander verdwijnt.
-  const stack = new Map<number, number>();
+  const kopmen = new Set(Object.values(state.kopman));
   return (
     <div class="minimap frame">
-      <svg viewBox={`0 0 ${n} 12`} preserveAspectRatio="none">
-        {state.terrain.map((t, i) => (
-          <rect key={i} x={i} y="8" width="1.02" height="4" fill={terrainColor(t)} />
-        ))}
-        {state.premies.map((p) => (
-          <rect key={p.id} x={p.pos - 0.3} y="0" width="0.6" height="12" fill="#ffc83d" />
-        ))}
-      </svg>
-      {rows.map((row) => {
-        const k = stack.get(row.tile) ?? 0;
-        stack.set(row.tile, k + 1);
-        const col = colorOf(teamById(state, row.teamId));
-        const left = Math.min(n, Math.max(0, row.rider.pos)) / n;
-        return (
-          <span
-            key={row.rider.id}
-            class={`mm-dot ${row.rank === 1 ? 'first' : ''}`}
-            style={{ left: `${left * 100}%`, top: `${Math.min(k, 3) * 4}px`, background: col.hex }}
-            title={`${row.rank}. ${row.rider.name}`}
-          />
-        );
-      })}
+      <ElevationProfile
+        terrain={state.terrain}
+        premies={state.premies}
+        riders={rows.map((row) => ({
+          id: row.rider.id,
+          pos: row.rider.pos,
+          type: row.rider.type,
+          color: teamById(state, row.teamId).color,
+          kop: kopmen.has(row.rider.id),
+          first: row.rank === 1,
+        }))}
+      />
     </div>
   );
 }
@@ -521,7 +522,9 @@ function StatBars({ rider, tolerance }: { rider: Rider; tolerance: number }) {
         const lost = Math.max(0, base + form - eff[k]);
         return (
           <div class="sb" key={k}>
-            <span class="sl">{STAT_LABELS[k].slice(0, 4)}</span>
+            <span class="sl">
+              <StatIcon stat={k} size={12} /> {STAT_LABELS[k].slice(0, 4)}
+            </span>
             <span class="track">
               <span class="seg base" style={{ width: `${Math.min(100, (Math.min(base, eff[k]) / 10) * 100)}%` }} />
               <span class="seg form" style={{ width: `${(Math.max(0, eff[k] - base) / 10) * 100}%` }} />
@@ -627,12 +630,22 @@ function RecruitPanel({ snap }: { snap: Snapshot }) {
       <div class="recruit-teams">
         {state.teams.map((t) => (
           <span class="rt" key={t.id} style={{ borderColor: colorOf(t).hex }}>
-            <b>{t.name}</b> € {t.coins}
-            {ridersOf(state, t.id).map((r) => (
-              <i key={r.id}>
-                {r.name.split(' ')[0]} · {RIDER_TYPES[r.type].label}
-              </i>
-            ))}
+            <span class="rt-head">
+              <b>{t.name}</b>
+              <Coins n={t.coins} />
+            </span>
+            <span class="rt-slots">
+              {Array.from({ length: 3 }, (_, i) => {
+                const r = ridersOf(state, t.id)[i];
+                return r ? (
+                  <span class="slot full" key={r.id} title={`${r.name} · ${RIDER_TYPES[r.type].label}`}>
+                    <RiderAvatar rider={r} color={t.color} size={38} />
+                  </span>
+                ) : (
+                  <span class="slot" key={`e${i}`} />
+                );
+              })}
+            </span>
           </span>
         ))}
       </div>
@@ -640,14 +653,21 @@ function RecruitPanel({ snap }: { snap: Snapshot }) {
       <div class="cands-tv">
         {rc.market.map((c) => (
           <div class={`cand-tv ${c.price === 0 ? 'free' : ''}`} key={c.rider.id}>
-            <div class="ct-top">
-              <b>{c.rider.name}</b>
-              <span class="price ty">{c.price === 0 ? 'GRATIS' : `€ ${c.price}`}</span>
+            <div class="ct-id">
+              <RiderAvatar rider={c.rider} size={64} />
+              <div class="ct-who">
+                <div class="ct-top">
+                  <b>{c.rider.name}</b>
+                  <span class="price ty">{c.price === 0 ? 'GRATIS' : `€ ${c.price}`}</span>
+                </div>
+                <TypeBadge type={c.rider.type} label />
+                <QuirkTag quirk={c.rider.quirk} />
+              </div>
             </div>
-            <div class="dim">
-              {RIDER_TYPES[c.rider.type].label} · {QUIRKS[c.rider.quirk].label}
+            <div class="ct-stats">
+              <StatBars rider={c.rider} tolerance={0} />
+              <StatRadar base={c.rider.base} size={84} labels={false} color="#ffc83d" />
             </div>
-            <StatBars rider={c.rider} tolerance={0} />
           </div>
         ))}
       </div>
@@ -736,17 +756,22 @@ function TeamPanel({ snap }: { snap: Snapshot }) {
                 <span class="chip" style={{ background: col.hex }} />
                 <b>{t.name}</b>
                 {t.isBot && <span class="bot"> bot</span>}
-                <span class="coins ty">€ {t.coins}</span>
+                <span class="coins">
+                  <Coins n={t.coins} />
+                </span>
                 <span class={`rd ty ${t.ready ? 'ok' : ''}`}>{t.ready ? 'KLAAR' : ''}</span>
               </div>
               {ridersOf(state, t.id).map((r) => (
                 <div class="br" key={r.id}>
-                  <div class="rn">
-                    {r.name} <i>{RIDER_TYPES[r.type].label}</i>
-                    {r.injury > 0 && <i class="injury"> geblesseerd</i>}
-                    <Fatigue value={r.fatigue} tolerance={tol} />
+                  <RiderAvatar rider={r} color={t.color} size={46} />
+                  <div class="brb">
+                    <div class="rn">
+                      {r.name} <TypeBadge type={r.type} />
+                      {r.injury > 0 && <i class="injury"> 🩹</i>}
+                      <Fatigue value={r.fatigue} tolerance={tol} />
+                    </div>
+                    <StatBars rider={r} tolerance={tol} />
                   </div>
-                  <StatBars rider={r} tolerance={tol} />
                 </div>
               ))}
               <div class="assets">
@@ -792,7 +817,7 @@ function Lobby({ snap }: { snap: Snapshot }) {
               return (
                 <div class="team" key={t.id} style={{ borderColor: col.hex }}>
                   <div class="tn">
-                    <span class="chip" style={{ background: col.hex }} /> {t.name}
+                    <TeamJersey color={t.color} size={30} /> {t.name}
                     {t.id === snap.presidentTeamId && <span class="crown ty"> PRESIDENT</span>}
                     {t.isBot && <span class="bot"> bot</span>}
                   </div>
@@ -887,22 +912,34 @@ function Results({ snap }: { snap: Snapshot }) {
   const res = state.stageResult!;
   const teams = [...res.teams].sort((a, b) => b.stagePoints - a.stagePoints);
   const rankOf = new Map(res.ranking.map((r) => [r.riderId, r.rank]));
+  const entries: PodiumEntry[] = teams.map((t) => {
+    const team = teamById(state, t.teamId);
+    const best = [...ridersOf(state, team.id)].sort((a, b) => (rankOf.get(a.id) ?? 99) - (rankOf.get(b.id) ?? 99))[0];
+    return {
+      teamId: team.id,
+      name: team.name,
+      color: team.color,
+      rider: best,
+      riderLabel: best ? `${best.name.split(' ')[0]} · #${rankOf.get(best.id)}` : undefined,
+      points: t.stagePoints,
+      pointsLabel: `+${t.stagePoints}`,
+      sub: `${t.totalPoints} totaal`,
+    };
+  });
   return (
     <div class="overlay">
       <div class="finish frame">
         <div class="ty kicker">UITSLAG ETAPPE {res.stage}</div>
-        <div class="podium">
+        <Podium entries={entries} />
+        <div class="podium details">
           {teams.map((t, i) => {
             const team = teamById(state, t.teamId);
             const col = colorOf(team);
             return (
               <div class={`pod p${i}`} key={t.teamId} style={{ borderColor: col.hex }}>
-                <div class="ty pos">{i + 1}</div>
                 <div class="pn">
-                  <span class="chip" style={{ background: col.hex }} /> {team.name}
-                </div>
-                <div class="pts ty">
-                  +{t.stagePoints} punten <span class="dim">({t.totalPoints} totaal)</span>
+                  <Medal place={i + 1} size={22} />
+                  <TeamStack riders={ridersOf(state, team.id)} color={team.color} size={26} /> {team.name}
                 </div>
                 {t.premiePoints > 0 && (
                   <div class="dim s">
@@ -911,14 +948,15 @@ function Results({ snap }: { snap: Snapshot }) {
                 )}
                 <div class="rs">
                   {ridersOf(state, team.id).map((r) => (
-                    <span key={r.id}>
-                      #{rankOf.get(r.id)} {t.kopmanId === r.id ? '★ ' : ''}
+                    <span key={r.id} class="rr">
+                      <RiderAvatar rider={r} color={team.color} size={22} />
+                      <b class="ty">#{rankOf.get(r.id)}</b> {t.kopmanId === r.id ? '★ ' : ''}
                       {r.name}
                     </span>
                   ))}
                 </div>
                 <div class="reward">
-                  +{t.prizeCoins + t.sponsorCoins} munten
+                  <Coins n={t.prizeCoins + t.sponsorCoins} />
                   {t.sponsorCoins > 0 && <span class="dim"> (sponsor {t.sponsorCoins})</span>}
                 </div>
                 {t.bonusCards.length > 0 && (
@@ -955,36 +993,42 @@ function Results({ snap }: { snap: Snapshot }) {
 function Finished({ snap }: { snap: Snapshot }) {
   const { state } = snap;
   const res = state.season!;
+  const strength = (r: Rider) => Object.values(r.base).reduce((n, v) => n + v, 0);
+  const entries: PodiumEntry[] = res.teams.map((t) => {
+    const team = teamById(state, t.teamId);
+    const star = state.riders.find((r) => r.id === state.kopman[team.id]) ?? [...ridersOf(state, team.id)].sort((a, b) => strength(b) - strength(a))[0];
+    return {
+      teamId: team.id,
+      name: team.name,
+      color: team.color,
+      rider: star,
+      riderLabel: star ? star.name.split(' ')[0] : undefined,
+      points: t.points,
+      pointsLabel: `${t.points} pnt`,
+      sub: `${t.coins} munten over`,
+    };
+  });
+  const lantern = res.lanterneRougeTeamId ? teamById(state, res.lanterneRougeTeamId) : null;
   return (
     <div class="overlay">
       <div class="finish frame">
         <div class="ty kicker">EINDSTAND VAN HET SEIZOEN</div>
-        <div class="podium">
-          {res.teams.map((t, i) => {
-            const team = teamById(state, t.teamId);
-            const col = colorOf(team);
-            return (
-              <div class={`pod p${i}`} key={t.teamId} style={{ borderColor: col.hex }}>
-                <div class="ty pos">{i + 1}</div>
-                <div class="pn">
-                  <span class="chip" style={{ background: col.hex }} /> {team.name}
-                </div>
-                <div class="pts ty">{t.points} punten</div>
-                <div class="rs">
-                  <span>{t.coins} munten over</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <Podium entries={entries} />
+        {lantern && (
+          <p class="lantern">
+            🏮 Rode lantaarn: <b>{lantern.name}</b>
+          </p>
+        )}
         <div class="awards">
           {res.awards.map((a) => {
             const team = teamById(state, a.teamId);
+            const star = ridersOf(state, team.id)[0];
             return (
               <div class="award" key={a.title}>
                 <div class="ty at">{a.title.toUpperCase()}</div>
-                <div>
-                  <span class="chip" style={{ background: colorOf(team).hex }} /> {team.name}
+                <div class="aw-team">
+                  {star ? <RiderAvatar rider={star} color={team.color} size={30} /> : <span class="chip" style={{ background: colorOf(team).hex }} />}
+                  {team.name}
                 </div>
                 <div class="dim">{a.blurb}</div>
               </div>

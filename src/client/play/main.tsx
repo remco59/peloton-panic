@@ -3,6 +3,20 @@ import { createPortal } from 'preact/compat';
 import { useContext, useEffect, useRef, useState } from 'preact/hooks';
 import '../common/theme.css';
 import { CardDetail, PlayingCard } from '../common/card';
+import {
+  Battery,
+  Coins,
+  Crown,
+  ElevationProfile,
+  Medal,
+  Podium,
+  QuirkTag,
+  RiderAvatar,
+  StatIcon,
+  StatRadar,
+  TypeBadge,
+} from '../common/visuals';
+import type { PodiumEntry } from '../common/visuals';
 import './play.css';
 import { installClickSounds, useCues } from './cues';
 import {
@@ -246,6 +260,8 @@ function CardRow({
   return <CardDetail def={def} price={price}>{children}</CardDetail>;
 }
 
+const colorIdx = (state: PublicState, r: Rider) => state.teams.find((t) => t.id === r.teamId)?.color ?? 0;
+
 function Bars({ rider, tolerance }: { rider: Rider; tolerance: number }) {
   const eff = effectiveStats(rider, tolerance);
   return (
@@ -254,7 +270,9 @@ function Bars({ rider, tolerance }: { rider: Rider; tolerance: number }) {
         const lost = Math.max(0, rider.base[k] + rider.form[k] - eff[k]);
         return (
           <div class="sb" key={k} title={STAT_HELP[k]}>
-            <span class="sl">{STAT_LABELS[k]}</span>
+            <span class="sl">
+              <StatIcon stat={k} size={13} /> {STAT_LABELS[k]}
+            </span>
             <span class="track">
               <span class="seg base" style={{ width: `${(Math.min(rider.base[k], eff[k]) / 10) * 100}%` }} />
               <span class="seg form" style={{ width: `${(Math.max(0, eff[k] - rider.base[k]) / 10) * 100}%` }} />
@@ -462,7 +480,9 @@ function Game({
       <header class="bar">
         <span class="chip" style={{ background: col.hex }} />
         <b class="who">{team.name}</b>
-        <span class="coins ty">€ {team.coins}</span>
+        <span class="coins">
+          <Coins n={team.coins} />
+        </span>
         <span class="ph">
           {stageTag}
           {title[state.phase]}
@@ -521,6 +541,10 @@ function RiderSheet({ rider, state, onClose, race, perks, bidon }: {
   return (
     <Sheet title={rider.name} onClose={onClose}>
       <div class="stack tight">
+        <div class="sheet-hero">
+          <RiderAvatar rider={rider} color={colorIdx(state, rider)} size={96} />
+          <StatRadar base={rider.base} eff={effectiveStats(rider, perks.overtrainTolerance)} size={116} color={TEAM_COLORS[colorIdx(state, rider) % TEAM_COLORS.length].hex} />
+        </div>
         <div>
           <div class="small">{t.label}</div>
           <div>{t.blurb}</div>
@@ -707,41 +731,32 @@ function Briefing({ view, act, president }: GameProps) {
 
 // ---- Parcours -----------------------------------------------------------------
 
-/** Het parcours als strip: terrein, premievlaggen en (in de race) waar de renners rijden. */
+/** Het parcours als berglandschap: terrein, premievlaggen en (in de race) de renners zelf. */
 function Profile({ state, teamId, onClick }: { state: PublicState; teamId?: string; onClick?: () => void }) {
-  const n = Math.max(1, state.trackLength);
-  const pct = (pos: number) => `${Math.min(100, Math.max(0, (pos / n) * 100))}%`;
   const showRiders = state.phase === 'race' || state.phase === 'resolve';
   const kopmen = new Set(Object.values(state.kopman));
   const Tag = onClick ? 'button' : 'div';
+  const lead = Math.max(0, ...state.riders.map((r) => Math.floor(r.pos)));
   return (
     <Tag class="profile" onClick={onClick} aria-label="Parcours">
-      <span class="flags">
-        {onClick && showRiders && <span class="p-hint">Stand ›</span>}
-        {state.premies.map((p) => (
-          <span class={`flag ${p.hits.length >= PREMIE_POINTS.length ? 'closed' : ''}`} key={p.id} style={{ left: pct(p.pos) }}>
-            ⚑ {PREMIE_INFO[p.id].short}
-          </span>
-        ))}
-      </span>
-      <span class="cells">
-        {state.terrain.map((t, i) => (
-          <i class={`pf pf-${t}`} key={i} />
-        ))}
-        {showRiders &&
-          state.riders.map((r) => {
-            const col = TEAM_COLORS[(state.teams.find((t) => t.id === r.teamId)?.color ?? 0) % TEAM_COLORS.length];
-            const mine = r.teamId === teamId;
-            return (
-              <b
-                key={r.id}
-                class={`dot ${mine ? 'mine' : ''} ${kopmen.has(r.id) ? 'kop' : ''}`}
-                style={{ left: pct(Math.min(n, r.pos)), background: col.hex }}
-              />
-            );
-          })}
-      </span>
-      <span class="finish-flag">▮</span>
+      {onClick && showRiders && <span class="p-hint">Stand ›</span>}
+      <ElevationProfile
+        terrain={state.terrain}
+        premies={state.premies}
+        riders={
+          showRiders
+            ? state.riders.map((r) => ({
+                id: r.id,
+                pos: r.pos,
+                type: r.type,
+                color: colorIdx(state, r),
+                mine: r.teamId === teamId,
+                kop: kopmen.has(r.id),
+                first: Math.floor(r.pos) === lead,
+              }))
+            : []
+        }
+      />
     </Tag>
   );
 }
@@ -764,8 +779,10 @@ function Stand({ state, teamId }: { state: PublicState; teamId?: string }) {
               </div>
             )}
             <div class={`stand-row ${row.teamId === teamId ? 'mine' : ''}`}>
-              <span class="rk ty">{tied ? '' : row.rank}</span>
-              <i class="sw" style={{ background: col.hex }} />
+              <span class="rk ty">{tied ? '' : row.rank === 1 ? <Crown size={16} /> : row.rank}</span>
+              <span class="sw" style={{ '--c': col.hex } as Record<string, string>}>
+                <RiderAvatar rider={row.rider} color={team?.color ?? 0} size="100%" />
+              </span>
               <span class="nm">
                 {kopmen.has(row.rider.id) && <span class="star">★ </span>}
                 <b>{firstName(row.rider.name)}</b> <span class="dim">{team?.name}</span>
@@ -846,17 +863,24 @@ function Recruit({ view, act }: ViewProps) {
           const poor = c.price > team.coins;
           return (
             <button class={`cand frame ${poor ? 'poor' : ''}`} key={r.id} onClick={() => setOpen(r.id)}>
-              <span class="cand-top">
-                <b>{r.name}</b>
-                <span class={`price ty ${c.price === 0 ? 'free' : ''}`}>{c.price === 0 ? 'GRATIS' : `€ ${c.price}`}</span>
-              </span>
-              <span class="dim s">
-                {RIDER_TYPES[r.type].label} · {QUIRKS[r.quirk].label}
+              <span class="cand-id">
+                <RiderAvatar rider={r} size={52} />
+                <span class="cand-who">
+                  <span class="cand-top">
+                    <b>{r.name}</b>
+                    <span class={`price ty ${c.price === 0 ? 'free' : ''}`}>{c.price === 0 ? 'GRATIS' : `€ ${c.price}`}</span>
+                  </span>
+                  <span class="cand-tags">
+                    <TypeBadge type={r.type} label />
+                    <QuirkTag quirk={r.quirk} />
+                  </span>
+                </span>
+                <StatRadar base={r.base} size={62} labels={false} color="#ffc83d" />
               </span>
               <span class="cand-stats s">
                 {STATS.map((k) => (
                   <span key={k} title={STAT_HELP[k]}>
-                    {STAT_LABELS[k].slice(0, 3)} <b>{r.base[k]}</b>
+                    <StatIcon stat={k} size={12} /> <b>{r.base[k]}</b>
                   </span>
                 ))}
                 <span>
@@ -870,6 +894,10 @@ function Recruit({ view, act }: ViewProps) {
       {cand && (
         <Sheet title={cand.rider.name} onClose={() => setOpen(null)}>
           <div class="stack tight">
+            <div class="sheet-hero">
+              <RiderAvatar rider={cand.rider} size={96} />
+              <StatRadar base={cand.rider.base} size={110} color="#ffc83d" />
+            </div>
             <div>
               <div class="small">{RIDER_TYPES[cand.rider.type].label}</div>
               <div>{RIDER_TYPES[cand.rider.type].blurb}</div>
@@ -919,8 +947,12 @@ function Naming({ view, act }: ViewProps) {
       <div class="grow stack">
         {mine.map((rd, i) => (
           <div class="rider-edit frame" key={rd.id}>
-            <div class="small">
-              {RIDER_TYPES[rd.type].label} · {QUIRKS[rd.quirk].label}
+            <div class="re-id">
+              <RiderAvatar rider={rd} color={team.color} size={44} />
+              <span class="re-tags">
+                <TypeBadge type={rd.type} label />
+                <QuirkTag quirk={rd.quirk} />
+              </span>
             </div>
             <div class="re-row">
               <input
@@ -1120,8 +1152,9 @@ function PlanTab({ view, act }: ViewProps) {
           return (
             <button class={`kop-pick ${sel ? 'on' : ''}`} key={r.id} onClick={() => act({ type: 'kopman', riderId: r.id })}>
               <span class="kp-top">
+                <RiderAvatar rider={r} color={colorIdx(state, r)} size={34} />
                 <b>{r.name}</b>
-                <span class="dim s">{RIDER_TYPES[r.type].label}</span>
+                <TypeBadge type={r.type} />
                 {sel && <span class="kp-tag ty">★ KOPMAN ×2</span>}
               </span>
               <span class="kp-fit">
@@ -1161,8 +1194,12 @@ function BoardTab({ view }: { view: View }) {
         return (
           <button class="frame rbox" key={r.id} onClick={() => setRid(r.id)}>
             <div class="r-top">
-              <b>{r.name}</b>
-              <span class="dim">{RIDER_TYPES[r.type].label}</span>
+              <RiderAvatar rider={r} color={team.color} size={42} />
+              <span class="r-who">
+                <b>{r.name}</b>
+                <TypeBadge type={r.type} label />
+              </span>
+              {r.injury > 0 && <span class="r-hurt" title="Geblesseerd">🩹</span>}
             </div>
             <Bars rider={r} tolerance={perks.overtrainTolerance} />
             <div class="r-meta">
@@ -1710,9 +1747,10 @@ function Race({ view, act }: ViewProps) {
           return (
             <div class="frame rider" key={r.id}>
               <div class="r-top">
+                <RiderAvatar rider={r} color={colorIdx(state, r)} size={34} />
                 <b class="r-name">{r.name}</b>
                 {isKop && <span class="kp-tag ty">★ KOPMAN ×2</span>}
-                <span class="dim r-sub">{RIDER_TYPES[r.type].label}</span>
+                <TypeBadge type={r.type} />
                 <button class="info" aria-label={`Over ${r.name}`} onClick={() => setSheet(r.id)}>
                   i
                 </button>
@@ -1730,9 +1768,7 @@ function Race({ view, act }: ViewProps) {
                 <span class={`terr t-${terrain}`}>
                   {TERRAINS[terrain].icon} {TERRAINS[terrain].label}
                 </span>
-                <span class="ebar">
-                  <span class={`fill ${pct <= 25 ? 'low' : pct <= 55 ? 'mid' : 'high'}`} style={{ width: `${pct}%` }} />
-                </span>
+                <Battery value={energy} max={r.maxEnergy} />
                 <span class={`el ${empty ? 'warn-s' : ''} ${gelOn ? 'boost' : ''}`}>
                   {empty ? 'Op de fles' : `${energy}/${r.maxEnergy}`}
                 </span>
@@ -1989,12 +2025,21 @@ function Results({ view, president }: { view: View; president: (w: PresidentActi
   const place = [...res.teams].sort((a, b) => b.stagePoints - a.stagePoints).findIndex((t) => t.teamId === teamId) + 1;
   const sab = res.sabotages.filter((x) => x.toTeamId === teamId || x.fromTeamId === teamId);
   const coins = mine.prizeCoins + mine.sponsorCoins;
+  const rankOf = new Map(res.ranking.map((r) => [r.riderId, r.rank]));
+  const entries: PodiumEntry[] = [...res.teams]
+    .sort((a, b) => b.stagePoints - a.stagePoints)
+    .map((t) => {
+      const team = state.teams.find((x) => x.id === t.teamId)!;
+      const best = state.riders.filter((r) => r.teamId === team.id).sort((a, b) => (rankOf.get(a.id) ?? 99) - (rankOf.get(b.id) ?? 99))[0];
+      return { teamId: team.id, name: team.id === teamId ? 'Jij' : team.name, color: team.color, rider: best, points: t.stagePoints, pointsLabel: `+${t.stagePoints}` };
+    });
   return (
     <section class="screen">
       <TutorialHint hint={hintFor(view, {})} />
       <div class="frame center big-result grow">
         <div class="small">Etappe {res.stage}</div>
-        <div class="place">{ordinal(place)}</div>
+        <Podium entries={entries} compact />
+        <div class="place sm">{ordinal(place)}</div>
         <div>
           <b>+{mine.stagePoints}</b> punten · <b>{mine.totalPoints}</b> totaal
         </div>
@@ -2059,12 +2104,19 @@ function Finished({ view, president }: { view: View; president: (w: PresidentAct
   const place = res.teams.findIndex((t) => t.teamId === teamId) + 1;
   const mine = res.teams.find((t) => t.teamId === teamId)!;
   const awards = res.awards.filter((a) => a.teamId === teamId);
+  const entries: PodiumEntry[] = res.teams.map((t) => {
+    const team = state.teams.find((x) => x.id === t.teamId)!;
+    const riders = state.riders.filter((r) => r.teamId === team.id);
+    const star = riders.find((r) => r.id === state.kopman[team.id]) ?? riders[0];
+    return { teamId: team.id, name: team.id === teamId ? 'Jij' : team.name, color: team.color, rider: star, points: t.points, pointsLabel: `${t.points}` };
+  });
   return (
     <section class="screen">
       <TutorialHint hint={hintFor(view, {})} />
       <div class="frame center big-result grow">
         <div class="small">Seizoen afgerond</div>
-        <div class="place">{ordinal(place)}</div>
+        <Podium entries={entries} compact />
+        <div class="place sm">{ordinal(place)}</div>
         <div>
           <b>{mine.points}</b> punten · € {mine.coins} over
         </div>
