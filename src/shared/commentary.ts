@@ -85,17 +85,37 @@ export function recruitIntroLines(s: PublicState): Line[] {
   return [
     j(
       choice([
-        `Voor de start van het seizoen: de transfermarkt. ${s.teams.length} ploegen kiezen elk drie renners uit dezelfde pool.`,
-        `Eerst de renners. ${s.teams.length} ploegen halen elk drie man binnen, uit één grote kring van hoop en spieren.`,
+        `Voor de start van het seizoen: de transfermarkt. ${s.teams.length} ploegen met elk tien euro en een eigen winkel vol renners en sponsors.`,
+        `Eerst de ploeg samenstellen. ${s.teams.length} managers, elk met tien euro, en een eigen etalage om uit te kiezen.`,
       ]),
     ),
     m(
       choice([
-        'Neo-profs zijn gratis, sterren kosten munten. Dat is bij ons precies zoals in het echt, maar dan met minder ruzie.',
-        'Een sprinter, een klimmer, een knecht: een ploeg heeft alles nodig. Behalve een plan, dat is optioneel.',
+        'Drie renners en maximaal twee sponsors. Sommige sponsors betalen meteen, andere pas als je wint, en weer andere leveren gewoon spullen.',
+        'Neo-profs zijn gratis, sterren kosten munten. Een sponsor kost niets, maar je kunt er maar twee op je shirt kwijt.',
       ]),
     ),
   ];
+}
+
+export function contractLines(teamName: string, def: string): Line[] {
+  const d = CARD_DEFS[def];
+  if (!d || Math.random() > 0.6) return [];
+  const bits: Record<string, string[]> = {
+    cash: [
+      `${teamName} tekent bij ${d.name}, en het geld staat al op de rekening.`,
+      `${d.name} betaalt direct. ${teamName} kiest voor zekerheid, en dat is zelden verkeerd.`,
+    ],
+    bonus: [
+      `${teamName} tekent bij ${d.name}. Die betaalt pas goed als er gewonnen wordt, dus nu moeten ze alleen nog winnen.`,
+      `${d.name} betaalt naar prestatie. ${teamName} heeft veel vertrouwen in zichzelf.`,
+    ],
+    supply: [
+      `${teamName} tekent bij ${d.name}. Geen geld, wel spullen, en dat is in de koers vaak beter.`,
+      `${d.name} gaat ${teamName} bevoorraden. Het peloton noemt dat een slimme zet, en een beetje ongelijk.`,
+    ],
+  };
+  return [(Math.random() < 0.5 ? j : m)(choice(bits[d.contract ?? 'cash']))];
 }
 
 export function namingLines(_s: PublicState): Line[] {
@@ -171,8 +191,6 @@ export function pickLines(teamName: string, def: string): Line[] {
     sponsor: [
       'Dat is een slimme zet: geld is altijd welkom.',
       'Een sponsor in de pocket. Dat komt goed uit.',
-      'Eindelijk kan de ploegleider stoppen met bidons vullen uit de kraan van het hotel.',
-      'De sponsor krijgt de naam op de broek, en niemand vraagt hoe dat voelt.',
     ],
     staff: [
       'Goede staf is goud waard.',
@@ -878,8 +896,8 @@ export function tutorialLines(topic: TutorialTopic, _s: PublicState): Line[] {
   switch (topic) {
     case 'recruit':
       return [
-        f('Het seizoen begint met rekruteren. Om de beurt kies je een renner uit de pool, drie keer.'),
-        f('Neo-profs zijn gratis, talenten en sterren kosten munten. Maak een mix: een klimmer voor de bergen, een sprinter voor de finish, en misschien een knecht.'),
+        f('Het seizoen begint in de winkel. Iedereen heeft zijn eigen winkel, met tien euro om uit te geven. Kies drie renners en teken maximaal twee sponsors.'),
+        f('Neo-profs zijn gratis, talenten en sterren kosten munten. Sponsors kosten niets: sommige betalen meteen, sommige als je presteert, andere leveren spullen. Maak een mix: een klimmer voor de bergen, een sprinter voor de finish, en misschien een knecht.'),
       ];
     case 'draft':
       return [
