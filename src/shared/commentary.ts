@@ -230,7 +230,7 @@ export function tutorialLines(topic: TutorialTopic, s: PublicState): Line[] {
     case 'race':
       return [
         j('De race begint. Elke ronde kies je per renner een tempo: Rustig, Normaal of Alles geven.'),
-        m('Alles geven is het snelst, maar het kost drie energie. Rustig herstelt juist wat. Heb je geen energie meer, dan ben je op de fles.'),
+        m('Alles geven is het snelst, maar het kost drie energie en kan alleen met genoeg energie. Rustig herstelt juist wat. Heb je geen energie meer, dan ben je op de fles.'),
         j('Je energie en je training bepalen hoe ver je rijdt. Hoe beter je voorbereid bent, hoe meer je eruit haalt.'),
       ];
     case 'resolve':
@@ -257,7 +257,7 @@ export function tutorialLines(topic: TutorialTopic, s: PublicState): Line[] {
       ];
     case 'season':
       return [
-        j('Na drie etappes tellen we de punten op. Wie het meeste heeft, wint het seizoen. De laatste krijgt de rode lantaarn.'),
+        j('Na drie etappes tellen we de punten op. De laatste etappe telt dubbel, dus niemand is kansloos. De laatste krijgt de rode lantaarn.'),
       ];
   }
 }

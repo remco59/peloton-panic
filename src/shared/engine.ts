@@ -30,6 +30,7 @@ import {
   RIDERS_PER_TEAM,
   SLOT_LIMITS,
   STAGES,
+  STAT_FACTOR,
   START_COINS,
   TRACK_LENGTH,
   TRAININGS_PER_RIDER,
@@ -191,7 +192,7 @@ export function effectiveStats(r: Rider, tolerance: number): Stats {
 
 export function maxEnergyFor(r: Rider, perks: Required<Perk>, bidon: boolean): number {
   const stats = effectiveStats(r, perks.overtrainTolerance);
-  return Math.max(4, 6 + stats.uithouding + perks.startEnergy - (bidon ? 2 : 0));
+  return Math.max(4, 3 + stats.uithouding + perks.startEnergy - (bidon ? 2 : 0));
 }
 
 type RaceView = Pick<PublicState, 'terrain' | 'trackLength' | 'event'>;
@@ -216,12 +217,12 @@ export function baseParts(
 ): MoveParts {
   const terrain = terrainAt(race, rider.pos);
   const stats = effectiveStats(rider, perks.overtrainTolerance);
-  const stat = Math.round(stats[statFor(race, rider, terrain)] * 0.75);
+  const stat = Math.round(stats[statFor(race, rider, terrain)] * STAT_FACTOR);
 
   let terr = 0;
   if (terrain === 'descent') terr += 1 + perks.descent;
-  if (terrain === 'flat') terr += perks.flat;
-  if (terrain === 'climb') terr += perks.climb;
+  if (terrain === 'flat' && effort !== 'rustig') terr += perks.flat;
+  if (terrain === 'climb' && effort !== 'rustig') terr += perks.climb;
 
   let quirk = 0;
   switch (rider.quirk) {
@@ -261,6 +262,22 @@ export function baseParts(
     draft: 0,
     chase: 0,
   };
+}
+
+/** Wat een renner met zoveel energie werkelijk kan: Alles geven kost 3 (minus korting), Normaal 1. */
+export function allesCost(perks: Pick<Required<Perk>, 'allesDiscount'>): number {
+  return Math.max(1, -EFFORTS.alles.energy - perks.allesDiscount);
+}
+
+export function resolveEffort(
+  energy: number,
+  perks: Pick<Required<Perk>, 'allesDiscount'>,
+  chosen: Effort,
+): { effort: Effort; exhausted: boolean } {
+  let effort = chosen;
+  if (effort === 'alles' && energy < allesCost(perks)) effort = 'normaal';
+  if (effort === 'normaal' && energy < 1) effort = 'rustig';
+  return { effort, exhausted: energy <= 0 && chosen !== 'rustig' };
 }
 
 export function sumParts(p: MoveParts): number {
@@ -782,13 +799,11 @@ function resolveRound(s: GameState): void {
   const work: Work[] = s.riders.map((rider, index) => {
     const team = teamOf(s, rider.teamId);
     const perks = perksOfTeam(team);
-    let effort: Effort = s.efforts[rider.id] ?? 'normaal';
-    const exhausted = rider.energy <= 0 && effort !== 'rustig';
-    if (exhausted) effort = 'rustig';
+    const { effort, exhausted } = resolveEffort(rider.energy, perks, s.efforts[rider.id] ?? 'normaal');
     const parts = baseParts(s, rider, perks, effort, exhausted);
     if (rider.pos <= median - CHASE_GAP) parts.chase = 2;
 
-    const roll = randInt(s, 12) + 1;
+    const roll = randInt(s, 10) + 1;
     const threshold = team.sabotage.includes('spijkers') ? 2 : 1;
     let pech = false;
     let shielded = false;
@@ -799,9 +814,9 @@ function resolveRound(s: GameState): void {
         shielded = true;
       } else {
         pech = true;
-        parts.luck = -Math.max(1, 2 - perks.pechReduction);
+        parts.luck = -Math.max(1, 3 - perks.pechReduction);
       }
-    } else if (roll === 12) {
+    } else if (roll === 10) {
       boost = true;
       parts.luck = 1;
     }
@@ -855,7 +870,7 @@ function resolveRound(s: GameState): void {
     let delta = EFFORTS[w.effort].energy;
     if (w.effort === 'rustig') delta += perks.restBonus + (rider.quirk === 'croissant' ? 1 : 0);
     if (w.effort === 'alles') {
-      delta += perks.allesDiscount;
+      delta = -allesCost(perks);
       team.stats.alles += 1;
     }
     if (windPaid) delta -= 1;
@@ -913,41 +928,41 @@ function finishStage(s: GameState): void {
   const ordered = s.riders.map((r, i) => ({ r, i })).sort((a, b) => b.r.pos - a.r.pos || a.i - b.i);
   const rankOf = new Map<string, number>();
   ordered.forEach((x, i) => rankOf.set(x.r.id, i + 1));
-  const ranking = ordered.map((x, i) => ({ riderId: x.r.id, rank: i + 1, points: POINTS_BY_RANK[i] ?? 0 }));
+  // De slotetappe telt dubbel, zodat het seizoen tot het einde spannend blijft.
+  const factor = s.stage >= STAGES ? 2 : 1;
+  const ranking = ordered.map((x, i) => ({ riderId: x.r.id, rank: i + 1, points: (POINTS_BY_RANK[i] ?? 0) * factor }));
 
   const results = s.teams.map((t) => {
     const mine = ranking.filter((x) => t.riderIds.includes(x.riderId));
     const stagePoints = mine.reduce((sum, x) => sum + x.points, 0);
     const best = Math.min(...mine.map((x) => x.rank));
     const perks = perksOfTeam(t);
-    const prizeCoins = best === 1 ? 4 : best === 2 ? 3 : best === 3 ? 2 : 1;
+    const prizeCoins = best === 1 ? 3 : best <= 3 ? 2 : 1;
     const sponsorCoins = perks.income + (best <= 3 ? perks.podiumBonus : 0);
     return { teamId: t.id, stagePoints, prizeCoins, sponsorCoins, bonusCards: [] as string[], totalPoints: 0, best };
   });
 
-  // Bonuskaarten: de winnaar krijgt er 2, de rest van het podium 1, de lantaarndrager 1 plus 2 munten.
-  const byPoints = [...results].sort((a, b) => b.stagePoints - a.stagePoints || a.best - b.best);
-  const lastRiderTeam = ordered[ordered.length - 1].r.teamId;
-  const lanterne = results.find((x) => x.teamId === lastRiderTeam)!;
-  const podiumSize = Math.min(3, Math.max(1, s.teams.length - 1));
-  byPoints.slice(0, podiumSize).forEach((x, i) => {
-    const n = i === 0 ? 2 : 1;
+  // Bonuskaarten en inhaalhulp: de etappewinnaar krijgt 1 kaart, de laagste in het klassement
+  // 2 kaarten en 2 munten, de een-na-laagste 1 kaart. Zo blijft achterliggen te winnen.
+  const give = (teamId: string, n: number) => {
+    const x = results.find((r) => r.teamId === teamId)!;
     for (let k = 0; k < n; k++) {
       const c = drawCard(s);
       if (c) {
-        teamOf(s, x.teamId).hand.push(c);
+        teamOf(s, teamId).hand.push(c);
         x.bonusCards.push(c.def);
       }
     }
-  });
-  {
-    const c = drawCard(s);
-    if (c) {
-      teamOf(s, lanterne.teamId).hand.push(c);
-      lanterne.bonusCards.push(c.def);
-    }
-    lanterne.prizeCoins += 2;
-  }
+  };
+  const byPoints = [...results].sort((a, b) => b.stagePoints - a.stagePoints || a.best - b.best);
+  const lastRiderTeam = ordered[ordered.length - 1].r.teamId;
+  give(byPoints[0].teamId, 1);
+  const standing = [...s.teams]
+    .map((t) => ({ t, total: t.points + (results.find((r) => r.teamId === t.id)?.stagePoints ?? 0) }))
+    .sort((a, b) => a.total - b.total || a.t.coins - b.t.coins);
+  give(standing[0].t.id, 2);
+  results.find((r) => r.teamId === standing[0].t.id)!.prizeCoins += 2;
+  if (standing.length >= 4) give(standing[1].t.id, 1);
 
   for (const x of results) {
     const t = teamOf(s, x.teamId);

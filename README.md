@@ -29,7 +29,7 @@ npm run dev
    munten, ruil met anderen of saboteer iemand (licht).
 3. **Race**: elke ronde kies je per renner **Rustig**, **Normaal** of **Alles geven**. Energie,
    training, staf en materiaal bepalen hoe ver je komt. Drafting, wind en pech doen de rest.
-4. **Uitslag**: punten voor de top zes, munten voor de uitslag en je sponsors, bonuskaarten voor
+4. **Uitslag**: punten voor de top zes (de slotetappe telt dubbel), munten voor de uitslag en je sponsors, bonuskaarten voor
    het podium en een troostkaart voor de rode lantaarn.
 
 ### Training en overtraining
@@ -85,6 +85,7 @@ deterministisch vanaf een seed en gedekt door `npm test`.
 | `npm test` | Tests van de regelmotor |
 | `npm run typecheck` | TypeScript-controle |
 | `npm run build` / `npm start` | Productiebuild en server |
+| `npm run balance` | Simuleert honderden seizoenen met bot-strategieën en toont winkansen, racelengte en de waarde per kaart |
 | `npm run screenshots` | Speelt een seizoen met bots en slaat screenshots op in `docs/screenshots` (vereist Google Chrome) |
 
 ## Screenshots

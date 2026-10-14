@@ -196,8 +196,8 @@ describe('winkel, training en spullen', () => {
   it('optelling van eigenschappen klopt', () => {
     const p = perksOf(['bakker', 'bank', 'voeding', 'teambus', 'fysio']);
     expect(p.income).toBe(5);
-    expect(p.startEnergy).toBe(4);
-    expect(p.descent).toBe(1);
+    expect(p.startEnergy).toBe(5);
+    expect(p.shield).toBe(0);
     expect(p.overtrainTolerance).toBe(1);
   });
 
@@ -306,7 +306,7 @@ describe('race', () => {
     ({ s, card: c } = give(s, s.teams[0].id, 'reservefiets') as { s: GameState; card: Card });
     s = reduce(s, { type: 'install', teamId: s.teams[0].id, cardId: c.id });
     for (const t of s.teams) s = reduce(s, { type: 'ready', teamId: t.id });
-    expect(s.teams[0].raceShield).toBe(1);
+    expect(s.teams[0].raceShield).toBe(2);
   });
 });
 
@@ -350,6 +350,7 @@ describe('uitslag en seizoen', () => {
     // Vorm is begrensd op 4 en vervaagt na de etappe met 1, dus nooit meer dan 3.
     for (const r of s.riders) expect(r.form.kracht).toBeLessThanOrEqual(3);
     expect(s.teams.reduce((n, t) => n + t.points, 0)).toBe(28);
+    expect(res.stage).toBe(1);
   });
 
   it('speelt een heel seizoen van 3 etappes uit', () => {

@@ -11,7 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "setup:tts": "bash scripts/setup-tts.sh",
-    "screenshots": "tsx scripts/screenshots.mts"
+    "screenshots": "tsx scripts/screenshots.mts",
+    "balance": "tsx scripts/balance.mts"
   },
   "dependencies": {
     "@fontsource/press-start-2p": "^5.3.0",

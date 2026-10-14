@@ -133,18 +133,18 @@ const defs: CardDef[] = [
   // Staf.
   { id: 'mecanicien', kind: 'staff', name: 'Mecanicien', text: 'Een lekke band of val kost 1 minder.', price: 3, count: 2, perk: { pechReduction: 1 } },
   { id: 'soigneur', kind: 'staff', name: 'Soigneur', text: '+1 herstel als je Rustig rijdt.', price: 3, count: 2, perk: { restBonus: 1 } },
-  { id: 'ploegleider', kind: 'staff', name: 'Ploegleider', text: 'Alles geven kost 1 energie minder.', price: 4, count: 2, perk: { allesDiscount: 1 } },
+  { id: 'ploegleider', kind: 'staff', name: 'Ploegleider', text: 'Alles geven kost 1 energie minder.', price: 3, count: 2, perk: { allesDiscount: 1 } },
   { id: 'voeding', kind: 'staff', name: 'Voedingsdeskundige', text: 'Elke renner start met +2 energie.', price: 3, count: 2, perk: { startEnergy: 2 } },
-  { id: 'fysio', kind: 'staff', name: 'Fysiotherapeut', text: 'Na elke etappe 1 extra vermoeidheid weg. Overtraining begint 1 later.', price: 3, count: 2, perk: { fatigueRecover: 1, overtrainTolerance: 1 } },
+  { id: 'fysio', kind: 'staff', name: 'Fysiotherapeut', text: 'Na elke etappe 1 extra vermoeidheid weg. Overtraining begint 1 later.', price: 2, count: 2, perk: { fatigueRecover: 1, overtrainTolerance: 1 } },
 
   // Materiaal.
-  { id: 'reservefiets', kind: 'material', name: 'Reservefiets', text: 'Vangt 1 lekke band of val per etappe volledig op.', price: 2, count: 2, perk: { shield: 1 } },
-  { id: 'aerowielen', kind: 'material', name: 'Aero-wielen', text: '+1 beweging op vlakke stukken.', price: 3, count: 2, perk: { flat: 1 } },
-  { id: 'klimfiets', kind: 'material', name: 'Lichte klimfiets', text: '+1 beweging op klimmen.', price: 3, count: 2, perk: { climb: 1 } },
+  { id: 'reservefiets', kind: 'material', name: 'Reservefiets', text: 'Vangt 2 lekke banden of vallen per etappe volledig op.', price: 3, count: 2, perk: { shield: 2 } },
+  { id: 'aerowielen', kind: 'material', name: 'Aero-wielen', text: '+1 beweging op vlakke stukken, als je Normaal of Alles rijdt.', price: 4, count: 1, perk: { flat: 1 } },
+  { id: 'klimfiets', kind: 'material', name: 'Lichte klimfiets', text: '+1 beweging op klimmen, als je Normaal of Alles rijdt.', price: 4, count: 1, perk: { climb: 1 } },
 
   // Teamwagens.
-  { id: 'volgauto', kind: 'car', name: 'Volgauto', text: 'Een renner met bijna lege benen krijgt eenmalig +3 energie.', price: 3, count: 2, perk: { service: 1 } },
-  { id: 'teambus', kind: 'car', name: 'Teambus', text: 'Iedereen start met +2 energie en rijdt +1 in afdalingen.', price: 4, count: 1, perk: { startEnergy: 2, descent: 1 } },
+  { id: 'volgauto', kind: 'car', name: 'Volgauto', text: 'Twee keer: een renner met bijna lege benen krijgt +3 energie.', price: 3, count: 2, perk: { service: 2 } },
+  { id: 'teambus', kind: 'car', name: 'Teambus', text: 'Iedereen start met +3 energie.', price: 4, count: 1, perk: { startEnergy: 3 } },
 
   // Sabotage: een lichte hinder voor één ander team, nooit uitschakeling.
   { id: 'spijkers', kind: 'sabotage', name: 'Spijkers op de weg', text: 'Doelwit krijgt dubbel zoveel kans op pech.', price: 3, count: 2, sabotage: 'spijkers' },
@@ -159,7 +159,7 @@ export const CARD_DEF_LIST: CardDef[] = defs;
 export const STAGE_INFO = [
   { name: 'Etappe 1: de vlakke opener', blurb: 'Vooral vlak met wat kasseien. Sprinters en rouleurs voelen zich thuis.', body: ['flat', 'flat', 'cobbles', 'flat', 'climb', 'cobbles'] as Terrain[] },
   { name: 'Etappe 2: de bergrit', blurb: 'Klimmen, klimmen en nog eens klimmen. Klimmers krijgen hier hun moment.', body: ['climb', 'climb', 'descent', 'flat', 'climb', 'descent'] as Terrain[] },
-  { name: 'Etappe 3: de slotetappe', blurb: 'Van alles wat, en een sprint om het seizoen te beslissen.', body: ['flat', 'climb', 'cobbles', 'descent', 'flat', 'climb'] as Terrain[] },
+  { name: 'Etappe 3: de slotetappe', blurb: 'Van alles wat, en een sprint om het seizoen te beslissen. Alle punten tellen dubbel.', body: ['flat', 'climb', 'cobbles', 'descent', 'flat', 'climb'] as Terrain[] },
 ];
 
 // ---- Gebeurtenissen --------------------------------------------------------

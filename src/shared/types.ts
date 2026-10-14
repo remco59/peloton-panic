@@ -3,7 +3,8 @@
 export const MIN_TEAMS = 2;
 export const MAX_TEAMS = 6;
 export const RIDERS_PER_TEAM = 3;
-export const TRACK_LENGTH = 32;
+export const TRACK_LENGTH = 48;
+export const STAT_FACTOR = 1; // hoeveel een eigenschapspunt aan beweging oplevert
 export const STAGES = 3;
 export const START_COINS = 5;
 export const MARKET_SIZE = 5;

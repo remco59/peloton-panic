@@ -16,7 +16,17 @@ import {
   TEAM_COLORS,
   TERRAINS,
 } from '../../shared/content';
-import { baseParts, effectiveStats, maxEnergyFor, perksOf, sumParts, teamDefIds, terrainAt } from '../../shared/engine';
+import {
+  allesCost,
+  baseParts,
+  effectiveStats,
+  maxEnergyFor,
+  perksOf,
+  resolveEffort,
+  sumParts,
+  teamDefIds,
+  terrainAt,
+} from '../../shared/engine';
 import type { PlayerAction, PresidentAction, RoomInfo, ServerMsg } from '../../shared/protocol';
 import { BLIND_COST, SLOT_LIMITS, STAGES, TRAININGS_PER_RIDER } from '../../shared/types';
 import type { Card, Effort, OfferView, PlayerView, PublicState, Rider, SlotKind, Stat } from '../../shared/types';
@@ -884,9 +894,10 @@ function Race({ view, act }: ViewProps) {
               {empty && <div class="warn-s">Op de fles: je kunt alleen Rustig rijden.</div>}
               <div class="efforts">
                 {(Object.keys(EFFORTS) as Effort[]).map((e) => {
-                  const parts = baseParts(state, r, perks, e, empty && e !== 'rustig');
-                  const mv = sumParts(parts);
-                  const disabled = locked || (empty && e !== 'rustig');
+                  const real = resolveEffort(r.energy, perks, e);
+                  const mv = sumParts(baseParts(state, r, perks, real.effort, real.exhausted));
+                  const disabled = locked || real.effort !== e;
+                  const cost = e === 'alles' ? -allesCost(perks) : EFFORTS[e].energy;
                   return (
                     <button
                       key={e}
@@ -896,7 +907,7 @@ function Race({ view, act }: ViewProps) {
                     >
                       <span class="ty">{EFFORTS[e].label}</span>
                       <span class="mv">≈ +{mv}</span>
-                      <span class="en">{EFFORTS[e].energy > 0 ? `+${EFFORTS[e].energy}` : EFFORTS[e].energy} energie</span>
+                      <span class="en">{cost > 0 ? `+${cost}` : cost} energie</span>
                     </button>
                   );
                 })}
