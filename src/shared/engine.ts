@@ -195,6 +195,14 @@ export function maxEnergyFor(r: Rider, perks: Required<Perk>, bidon: boolean): n
   return Math.max(4, 3 + stats.uithouding + perks.startEnergy - (bidon ? 2 : 0));
 }
 
+/** Renners starten niet vol: zo loont het om onderweg te sparen (Rustig rijden). Voeding/teambus tellen wel volledig mee. */
+export const START_ENERGY_FRACTION = 0.6;
+
+export function startEnergyFor(maxEnergy: number, perks: Required<Perk>): number {
+  const base = Math.max(0, maxEnergy - perks.startEnergy);
+  return Math.min(maxEnergy, Math.ceil(base * START_ENERGY_FRACTION) + perks.startEnergy);
+}
+
 type RaceView = Pick<PublicState, 'terrain' | 'trackLength' | 'event'>;
 
 export function terrainAt(r: { terrain: Terrain[]; trackLength: number }, pos: number): Terrain {
@@ -734,7 +742,7 @@ function startRace(s: GameState): void {
     for (const id of team.riderIds) {
       const r = riderOf(s, id);
       r.maxEnergy = maxEnergyFor(r, perks, bidon);
-      r.energy = r.maxEnergy;
+      r.energy = startEnergyFor(r.maxEnergy, perks);
     }
   }
   startRound(s);

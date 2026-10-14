@@ -251,13 +251,14 @@ describe('ruilen', () => {
 });
 
 describe('race', () => {
-  it('start als iedereen klaar is, met volle energie', () => {
+  it('start als iedereen klaar is, niet op volle energie', () => {
     const s = toRace(3);
     expect(s.phase).toBe('race');
     expect(s.round).toBe(1);
     for (const r of s.riders) {
-      expect(r.energy).toBe(r.maxEnergy);
       expect(r.maxEnergy).toBeGreaterThanOrEqual(4);
+      expect(r.energy).toBeGreaterThan(0);
+      expect(r.energy).toBeLessThan(r.maxEnergy);
     }
   });
 
