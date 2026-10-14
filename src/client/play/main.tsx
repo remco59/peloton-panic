@@ -539,22 +539,22 @@ function Lobby({ view, act, president }: GameProps) {
       <div class="grow stack">
         {mine.map((rd, i) => (
           <div class="rider-edit frame" key={rd.id}>
-            <div class="re-head">
-              <span class="small">{RIDER_TYPES[rd.type].label}</span>
+            <div class="small">{RIDER_TYPES[rd.type].label}</div>
+            <div class="re-row">
+              <input
+                value={names[i] ?? ''}
+                maxLength={20}
+                onInput={(e) => {
+                  const next = [...names];
+                  next[i] = (e.target as HTMLInputElement).value;
+                  setNames(next);
+                }}
+                onBlur={() => act({ type: 'nameRiders', names })}
+              />
               <button class="info" onClick={() => setInfo(i)} aria-label={`Over ${names[i] || rd.name}`}>
                 i
               </button>
             </div>
-            <input
-              value={names[i] ?? ''}
-              maxLength={20}
-              onInput={(e) => {
-                const next = [...names];
-                next[i] = (e.target as HTMLInputElement).value;
-                setNames(next);
-              }}
-              onBlur={() => act({ type: 'nameRiders', names })}
-            />
           </div>
         ))}
       </div>
@@ -646,15 +646,15 @@ function Draft({ view, act }: ViewProps) {
       <div class="dock">
         {mine && (
           <div class="row2">
-            <button class="big" onClick={() => act({ type: 'draftPick', source: { kind: 'deck' } })}>
+            <button class="big slim" onClick={() => act({ type: 'draftPick', source: { kind: 'deck' } })}>
               Van de stapel
             </button>
-            <button class="big" onClick={() => act({ type: 'draftSkip' })}>
+            <button class="big slim" onClick={() => act({ type: 'draftSkip' })}>
               Overslaan
             </button>
           </div>
         )}
-        <button class="big" disabled={cards.length === 0} onClick={() => setHand(true)}>
+        <button class="big slim" disabled={cards.length === 0} onClick={() => setHand(true)}>
           Jouw kaarten ({cards.length})
         </button>
       </div>
@@ -762,7 +762,7 @@ function BoardTab({ view }: { view: View }) {
           </button>
         );
       })}
-      <button class="big" onClick={() => setGear(true)}>
+      <button class="big slim" onClick={() => setGear(true)}>
         Jouw spullen ({filled}/{total})
       </button>
       {picked && <RiderSheet rider={picked} state={state} perks={perks} bidon={bidon} onClose={() => setRid(null)} />}

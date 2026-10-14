@@ -241,16 +241,18 @@ p {
 }
 
 .rider-edit {
-  padding: 10px 14px;
+  flex: none;
+  padding: 8px 12px;
 }
-.re-head {
+.re-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
+  margin-top: 4px;
 }
 .rider-edit input {
-  margin: 6px 0 0;
-  padding: 11px 14px;
+  margin: 0;
+  padding: 10px 14px;
   font-size: 17px;
   background: var(--panel-2);
 }
@@ -1019,8 +1021,8 @@ p {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 14px;
+  gap: 6px;
+  padding: 8px 12px;
   text-align: left;
   border: 0;
   color: inherit;
@@ -1135,4 +1137,13 @@ select.pick {
   from {
     opacity: 0;
   }
+}
+.tabbody .stack {
+  gap: 8px;
+}
+.tabbody .sbars {
+  gap: 4px 14px;
+}
+.big.slim {
+  padding: 12px 14px;
 }
