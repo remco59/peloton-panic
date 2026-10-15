@@ -1,6 +1,6 @@
 // Parcoursprofiel: tel de terreinsoorten en vat samen wat er onderweg te halen valt.
 
-import { PREMIE_INFO, STAGE_INFO, TERRAINS } from './content';
+import { PREMIE_INFO, stageInfo, TERRAINS } from './content';
 import type { PublicState, Terrain } from './types';
 import { STAGES } from './types';
 
@@ -16,11 +16,11 @@ export interface Profile {
 const ORDER: Terrain[] = ['climb', 'flat', 'cobbles', 'descent'];
 const LABEL: Record<Terrain, string> = { climb: 'klim', flat: 'vlak', cobbles: 'kasseien', descent: 'afdaling' };
 
-export function stageProfile(s: Pick<PublicState, 'terrain' | 'premies' | 'stage'>): Profile {
+export function stageProfile(s: Pick<PublicState, 'terrain' | 'premies' | 'stage' | 'course'>): Profile {
   const counts: Record<Terrain, number> = { flat: 0, climb: 0, descent: 0, cobbles: 0 };
   for (const t of s.terrain) counts[t] += 1;
   const total = Math.max(1, s.terrain.length);
-  const info = STAGE_INFO[Math.min(STAGES, Math.max(1, s.stage)) - 1];
+  const info = stageInfo(s.course, Math.min(STAGES, Math.max(1, s.stage)));
   return {
     counts,
     climbShare: counts.climb / total,

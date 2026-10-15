@@ -235,11 +235,37 @@ export const CONTRACT_LIST: CardDef[] = defs.filter((d) => !!d.contract);
 
 // ---- Etappes ---------------------------------------------------------------
 
-export const STAGE_INFO = [
-  { name: 'Etappe 1: de vlakke opener', blurb: 'Vooral vlak met wat kasseien. Sprinters en rouleurs voelen zich thuis, de rest voelt zich vooral uitgenodigd.', body: ['flat', 'flat', 'cobbles', 'flat', 'climb', 'cobbles'] as Terrain[] },
-  { name: 'Etappe 2: de bergrit', blurb: 'Klimmen, klimmen en nog eens klimmen. Klimmers krijgen hier hun moment, de rest krijgt blaren.', body: ['climb', 'climb', 'descent', 'flat', 'climb', 'descent'] as Terrain[] },
-  { name: 'Etappe 3: de slotetappe', blurb: 'Van alles wat, en een sprint om het seizoen te beslissen. Alle punten tellen dubbel, net als de zenuwen.', body: ['flat', 'climb', 'cobbles', 'descent', 'flat', 'climb'] as Terrain[] },
+/** Een parcoursprofiel: de mix van terrein waaruit een etappe wordt opgebouwd. */
+export interface Course {
+  id: string;
+  name: string;
+  blurb: string;
+  body: Terrain[];
+  finale?: boolean; // alleen als slotetappe (die telt dubbel)
+}
+
+export const COURSES: Course[] = [
+  { id: 'opener', name: 'de vlakke opener', blurb: 'Vooral vlak met wat kasseien. Sprinters en rouleurs voelen zich thuis, de rest voelt zich vooral uitgenodigd.', body: ['flat', 'flat', 'cobbles', 'flat', 'climb', 'cobbles'] },
+  { id: 'bergrit', name: 'de bergrit', blurb: 'Klimmen, klimmen en nog eens klimmen. Klimmers krijgen hier hun moment, de rest krijgt blaren.', body: ['climb', 'climb', 'descent', 'flat', 'climb', 'descent'] },
+  { id: 'klassieker', name: 'de kasseienklassieker', blurb: 'Kasseien, kasseien en nog eens kasseien. Krachtpatsers en rouleurs genieten, klimmers bidden om droog weer.', body: ['cobbles', 'cobbles', 'flat', 'cobbles', 'descent', 'flat'] },
+  { id: 'heuvel', name: 'de Vlaamse heuvels', blurb: 'Korte, steile klimmetjes over de kasseien, met haastige afdalingen ertussen. Puncheurs en krachtpatsers rijden hier hun eigen koers.', body: ['climb', 'climb', 'cobbles', 'cobbles', 'descent', 'descent'] },
+  { id: 'sprintrit', name: 'de sprintersrit', blurb: 'Plat, plat en nog eens plat, tot aan de sprint. Sprinters winnen, de rest kijkt toe.', body: ['flat', 'flat', 'flat', 'cobbles', 'climb', 'flat'] },
+  { id: 'slot', name: 'de slotetappe', blurb: 'Van alles wat, en een sprint om het seizoen te beslissen. Alle punten tellen dubbel, net als de zenuwen.', body: ['flat', 'climb', 'cobbles', 'descent', 'flat', 'climb'], finale: true },
+  { id: 'bergfinale', name: 'de bergfinale', blurb: 'Het seizoen wordt in de bergen beslist. Alle punten tellen dubbel, dus klimmers krijgen een tweede kans.', body: ['flat', 'climb', 'climb', 'descent', 'climb', 'climb'], finale: true },
+  { id: 'sprintfinale', name: 'de sprintfinale', blurb: 'Vlak en snel naar een massasprint. Alle punten tellen dubbel, dus sprinters dromen van de slotdag.', body: ['flat', 'flat', 'cobbles', 'flat', 'climb', 'climb'], finale: true },
 ];
+export const COURSE_BY_ID: Record<string, Course> = Object.fromEntries(COURSES.map((c) => [c.id, c]));
+
+/** Het vaste seizoen van vóór er variatie was; ook de terugval voor bewaarde kamers zonder parcoursen. */
+export const LEGACY_COURSE = ['opener', 'bergrit', 'slot'];
+
+/** Het parcours van een etappe (1, 2, 3), met een titel als 'Etappe 2: de bergrit'. */
+export function stageInfo(course: readonly string[] | undefined, stage: number): Course {
+  const n = Math.max(1, stage);
+  const ids = course && course.length >= n ? course : LEGACY_COURSE;
+  const c = COURSE_BY_ID[ids[Math.min(ids.length, n) - 1]] ?? COURSE_BY_ID[LEGACY_COURSE[Math.min(LEGACY_COURSE.length, n) - 1]];
+  return { ...c, name: `Etappe ${n}: ${c.name}` };
+}
 
 // ---- Uitleg vooraf ---------------------------------------------------------
 // Wordt voor de eerste draft getoond, zonder timer. Op de tv groot, op de telefoon klein.

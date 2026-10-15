@@ -1,6 +1,6 @@
 // Opbouw: spel, parcours, premies en renners aanmaken.
 
-import { CARD_DEF_LIST, STAGE_INFO } from '../content';
+import { CARD_DEF_LIST, COURSES, stageInfo } from '../content';
 import { pick, randInt, shuffle } from '../rng';
 import { MARKET_SIZE, STAGES, TRACK_LENGTH } from '../types';
 import type { Card, GameState, Premie, Rider, Terrain } from '../types';
@@ -18,6 +18,7 @@ export function createGame(seed: number): GameState {
     premies: [],
     round: 0,
     stage: 0,
+    course: [],
     trackLength: TRACK_LENGTH,
     terrain: [],
     teams: [],
@@ -47,12 +48,19 @@ export function createGame(seed: number): GameState {
   };
 }
 
-export function makeTrack(s: { rng: number }, length: number, stage: number): Terrain[] {
+/** Trekt de parcoursen van een seizoen: twee verschillende gewone etappes en een finale. */
+export function pickCourse(s: { rng: number }): string[] {
+  const regular = shuffle(s, COURSES.filter((c) => !c.finale));
+  const finale = pick(s, COURSES.filter((c) => c.finale));
+  return [...regular.slice(0, STAGES - 1).map((c) => c.id), finale.id];
+}
+
+export function makeTrack(s: { rng: number }, length: number, stage: number, course?: readonly string[]): Terrain[] {
   const out: Terrain[] = [];
   const push = (t: Terrain, n: number) => {
     for (let i = 0; i < n && out.length < length; i++) out.push(t);
   };
-  const body = STAGE_INFO[Math.min(STAGES, Math.max(1, stage)) - 1].body;
+  const body = stageInfo(course, Math.min(STAGES, Math.max(1, stage))).body;
   push('flat', 4);
   let guard = 0;
   while (out.length < length - 5 && guard++ < 60) {

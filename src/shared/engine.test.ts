@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   baseParts,
   botDraft,
+  makeTrack,
+  pickCourse,
   botEfforts,
   botShopStep,
   crashChance,
@@ -44,7 +46,7 @@ import {
   STAGE_FACTOR,
   TRACK_LENGTH,
 } from './types';
-import { CARD_DEFS, EVENTS, EVENT_IDS } from './content';
+import { CARD_DEFS, COURSE_BY_ID, COURSES, EVENTS, EVENT_IDS, LEGACY_COURSE, stageInfo } from './content';
 import type { Action, Card, Effort, GameState, RacePlay, ShopItem } from './types';
 
 function lobby(n: number, seed = 42): GameState {
@@ -529,6 +531,109 @@ describe('kopman, knechten en premies', () => {
     const team = res.teams.find((t) => t.kopmanId === kop[0])!;
     expect(team.riderPoints).toBeGreaterThanOrEqual(20);
     expect(team.stagePoints).toBe(team.riderPoints + team.premiePoints);
+  });
+});
+
+describe('parcoursen', () => {
+  const terrainCount = (t: string[], x: string) => t.filter((y) => y === x).length;
+
+  it('trekt per seizoen twee verschillende gewone etappes en een finale', () => {
+    for (let seed = 1; seed <= 60; seed++) {
+      const course = pickCourse({ rng: seed });
+      expect(course).toHaveLength(STAGES);
+      expect(new Set(course).size).toBe(STAGES);
+      const defs = course.map((id) => COURSE_BY_ID[id]);
+      expect(defs.slice(0, -1).every((c) => !c.finale)).toBe(true);
+      expect(defs[defs.length - 1].finale).toBe(true);
+    }
+  });
+
+  it('geeft verschillende seizoenen verschillende parcoursen, maar dezelfde seed hetzelfde seizoen', () => {
+    const seasons = new Set<string>();
+    for (let seed = 1; seed <= 60; seed++) seasons.add(pickCourse({ rng: seed }).join('>'));
+    expect(seasons.size).toBeGreaterThan(10);
+    expect(pickCourse({ rng: 7 })).toEqual(pickCourse({ rng: 7 }));
+  });
+
+  it('bewaart het seizoensparcours in de toestand en laat de tv-weergave het zien', () => {
+    const s = started(3, 5);
+    expect(s.course).toHaveLength(STAGES);
+    expect(toPublic(s).course).toEqual(s.course);
+    // Een nieuw seizoen na een rematch trekt opnieuw.
+    expect(s.course.every((id) => COURSE_BY_ID[id])).toBe(true);
+  });
+
+  it('bouwt elke etappe uit het terrein van haar eigen profiel', () => {
+    // Over veel seeds is de kasseienklassieker echt kasseienrijker dan de sprintersrit,
+    // en de bergrit echt klimmeriger dan de sprintersrit.
+    const avg = (id: string, x: string) => {
+      let total = 0;
+      for (let seed = 1; seed <= 80; seed++) total += terrainCount(makeTrack({ rng: seed }, 48, 2, ['opener', id, 'slot']), x);
+      return total / 80;
+    };
+    expect(avg('klassieker', 'cobbles')).toBeGreaterThan(avg('sprintrit', 'cobbles') + 6);
+    expect(avg('bergrit', 'climb')).toBeGreaterThan(avg('sprintrit', 'climb') + 8);
+    expect(avg('heuvel', 'climb')).toBeGreaterThan(avg('sprintrit', 'climb') + 4);
+    expect(avg('sprintrit', 'flat')).toBeGreaterThan(avg('bergrit', 'flat') + 8);
+    for (const c of COURSES) {
+      const t = makeTrack({ rng: 3 }, 48, 1, [c.id, 'bergrit', 'slot']);
+      expect(t).toHaveLength(48);
+      expect(t.slice(0, 4)).toEqual(['flat', 'flat', 'flat', 'flat']); // altijd een rustige start
+    }
+  });
+
+  it('geeft geen twee parcoursen dezelfde terreinmix (anders is er geen variatie)', () => {
+    const kinds = ['flat', 'climb', 'cobbles', 'descent'];
+    const mix = (id: string) => {
+      const total = Object.fromEntries(kinds.map((k) => [k, 0]));
+      for (let seed = 1; seed <= 80; seed++)
+        for (const t of makeTrack({ rng: seed }, 48, 1, [id, 'bergrit', 'slot'])) total[t] += 1 / 80;
+      return total;
+    };
+    for (let i = 0; i < COURSES.length; i++) {
+      for (let j = i + 1; j < COURSES.length; j++) {
+        const a = mix(COURSES[i].id);
+        const b = mix(COURSES[j].id);
+        const distance = kinds.reduce((n, k) => n + Math.abs(a[k] - b[k]), 0);
+        expect(distance, `${COURSES[i].id} lijkt te veel op ${COURSES[j].id}`).toBeGreaterThan(8);
+      }
+    }
+  });
+
+  it('houdt het gemiddelde terrein per etappe in de buurt van het oude vaste seizoen', () => {
+    // Anders wordt een kaart als Aero-wielen of Lichte klimfiets gemiddeld veel beter dan de andere.
+    const total: Record<string, number> = { flat: 0, climb: 0, cobbles: 0, descent: 0 };
+    let n = 0;
+    for (let seed = 1; seed <= 120; seed++) {
+      const course = pickCourse({ rng: seed });
+      course.forEach((_, i) => {
+        for (const t of makeTrack({ rng: seed * 7 + i }, 48, i + 1, course)) total[t] += 1;
+        n += 1;
+      });
+    }
+    const avg = (k: string) => total[k] / n;
+    expect(avg('flat')).toBeGreaterThan(18.5);
+    expect(avg('flat')).toBeLessThan(22.5);
+    expect(avg('climb')).toBeGreaterThan(14);
+    expect(avg('climb')).toBeLessThan(18);
+  });
+
+  it('valt terug op het oude vaste seizoen voor een bewaarde toestand zonder parcoursen', () => {
+    expect(stageInfo(undefined, 1).name).toBe('Etappe 1: de vlakke opener');
+    expect(stageInfo([], 2).name).toBe('Etappe 2: de bergrit');
+    expect(stageInfo(undefined, 3).name).toBe('Etappe 3: de slotetappe');
+    expect(LEGACY_COURSE).toEqual(['opener', 'bergrit', 'slot']);
+    // Een kamer van vóór deze wijziging blijft speelbaar.
+    const legacy = started(2, 4) as GameState;
+    (legacy as { course?: string[] }).course = undefined;
+    expect(() => makeTrack(legacy, 48, 2, legacy.course)).not.toThrow();
+  });
+
+  it('noemt de etappe met haar eigen naam en laat alleen finales dubbel tellen', () => {
+    expect(stageInfo(['heuvel', 'klassieker', 'bergfinale'], 1).name).toBe('Etappe 1: de Vlaamse heuvels');
+    expect(stageInfo(['heuvel', 'klassieker', 'bergfinale'], 3).blurb).toMatch(/dubbel/);
+    for (const c of COURSES.filter((x) => !x.finale)) expect(c.blurb).not.toMatch(/tellen dubbel/);
+    expect(COURSES.filter((c) => c.finale).length).toBeGreaterThanOrEqual(2);
   });
 });
 
@@ -1039,6 +1144,8 @@ describe('sponsorcontracten', () => {
     const kop = s.teams.map((t) => s.kopman[t.id]);
     s.riders.forEach((r) => (r.pos = r.id === kop[winner] ? TRACK_LENGTH - 1 : 5));
     s.premies = [];
+    // Geen toevalsgebeurtenis: een hond op de weg voor de renner op de streep zou de etappe uitstellen.
+    s.event = null;
     s = lockAll(s, 'alles');
     s = reduce(s, { type: 'next' });
     return s.stageResult!;

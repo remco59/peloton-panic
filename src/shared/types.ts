@@ -327,6 +327,7 @@ export interface GameState {
   premies: Premie[];
   round: number;
   stage: number;
+  course: string[]; // parcoursprofiel per etappe, bij de start van het seizoen getrokken
   trackLength: number;
   terrain: Terrain[];
   teams: Team[];
@@ -381,6 +382,7 @@ export interface PublicState {
   premies: Premie[];
   round: number;
   stage: number;
+  course: string[]; // parcoursprofiel per etappe, bij de start van het seizoen getrokken
   trackLength: number;
   terrain: Terrain[];
   teams: PublicTeam[];

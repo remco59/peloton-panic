@@ -23,6 +23,7 @@ export function toPublic(s: GameState): PublicState {
     premies: s.premies,
     round: s.round,
     stage: s.stage,
+    course: s.course,
     trackLength: s.trackLength,
     terrain: s.terrain,
     teams: s.teams.map((t) => ({

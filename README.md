@@ -115,6 +115,28 @@ ander doet. Het toeval zit in pech (ongeveer één op de vijf per renner per ron
 reservefiets, mecanicien of de volgauto bij die renner), in valpartijen en in de gebeurtenis van
 de ronde.
 
+### Parcoursen
+
+Een seizoen heeft niet elke keer dezelfde drie etappes. Bij de start trekt het spel twee verschillende
+gewone etappes en een finale; de finale telt dubbel. Zo loont een andere renner, training of
+uitrusting in elk seizoen weer ergens anders. De gekozen parcoursen staan in `COURSES` in
+`src/shared/content.ts`; elk profiel is een mix van terreinen waaruit het spel het parcours opbouwt.
+
+| Etappe | Karakter | Gemiddeld per etappe (48 tegels) |
+| --- | --- | --- |
+| De vlakke opener | vlak met kasseien | 28 vlak, 14 kasseien, 7 klim |
+| De bergrit | echte bergen | 25 klim, 14 vlak, 10 afdaling |
+| De kasseienklassieker | kasseien en kracht | 19 kasseien, 20 vlak, 6 klim |
+| De Vlaamse heuvels | korte steile klimmetjes over kasseien | 20 klim, 12 kasseien, 9 afdaling, 7 vlak |
+| De sprintersrit | vlak met een sprint | 34 vlak, 7 klim, 7 kasseien |
+| Finale: de slotetappe | van alles wat | 20 vlak, 17 klim, 6 kasseien |
+| Finale: de bergfinale | beslissing in de bergen | 28 klim, 14 vlak |
+| Finale: de sprintfinale | massasprint | 28 vlak, 14 klim, 7 kasseien |
+
+Over alle parcoursen samen is het gemiddelde terrein hetzelfde als in het oude vaste seizoen, dus geen
+enkele kaart wordt gemiddeld beter of slechter. Bewaarde kamers van vóór deze wijziging spelen het
+oude seizoen uit.
+
 ### Weer en valpartijen
 
 Elke etappe heeft vooraf een weertype: **droog**, **wisselvallig** of **regen**. Bij regen zijn

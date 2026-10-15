@@ -6,7 +6,7 @@ import type { GameState, Rider, Team } from '../types';
 import { RuleError, WEATHER_DECK } from './base';
 import { perksOfTeam, riderOf, teamOf } from './calc';
 import { deliverSupplies } from './recruit';
-import { buildDeck, makePremies, makeTrack, newCard, refillMarket, stageFit } from './setup';
+import { buildDeck, makePremies, makeTrack, newCard, pickCourse, refillMarket, stageFit } from './setup';
 
 // ---- Lobby en start ----------------------------------------------------------
 
@@ -71,6 +71,7 @@ export function start(s: GameState): GameState {
   s.market = [];
   refillMarket(s);
   s.stage = 0;
+  s.course = pickCourse(s);
   s.season = null;
   s.stageResult = null;
   s.sabotageLog = [];
@@ -93,7 +94,7 @@ export function start(s: GameState): GameState {
 
 export function beginStage(s: GameState): void {
   s.stage += 1;
-  s.terrain = makeTrack(s, s.trackLength, s.stage);
+  s.terrain = makeTrack(s, s.trackLength, s.stage, s.course);
   s.premies = makePremies(s.terrain, s.trackLength);
   s.riders.forEach((r) => {
     r.pos = 0;
