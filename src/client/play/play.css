@@ -175,13 +175,10 @@ button:disabled {
   padding: 6px;
   text-align: center;
 }
-/* Een bot speelt voor deze ploeg: zichtbaar, met een grote knop om terug te nemen. */
+/* Een bot speelt voor deze ploeg: zichtbaar, met een grote knop om terug te nemen. Staat in de flow,
+   zodat het de inhoud naar beneden duwt in plaats van er overheen te liggen. */
 .pilot {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: calc(max(12px, env(safe-area-inset-top)) + 42px);
-  z-index: 20;
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
