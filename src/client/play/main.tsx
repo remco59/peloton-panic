@@ -418,7 +418,11 @@ function JoinScreen({
       <button class="big primary ty" disabled={!ready} onClick={() => onJoin(code, name.trim())}>
         {connecting ? 'MEEDOEN...' : 'MEEDOEN'}
       </button>
-      {!online && <p class="bad">Verbinden met de server...</p>}
+      {!online && (
+        <p class="dim" role="status">
+          Verbinden met de server... Lukt dat niet? Controleer of je op hetzelfde wifi zit als de tv.
+        </p>
+      )}
       {fatal && <p class="bad">{fatal}</p>}
     </div>
   );
@@ -481,7 +485,7 @@ function Game({
   return (
     <div class="game" style={{ '--team': col.hex } as Record<string, string>}>
       <header class="bar">
-        <span class="chip" style={{ background: col.hex }} />
+        <span class="chip" data-s={col.shape} style={{ background: col.hex }} />
         <b class="who">{team.name}</b>
         <span class="coins">
           <Coins n={team.coins} max={3} />
@@ -1174,9 +1178,9 @@ function TeamPhase({ view, act }: ViewProps) {
   const incoming = me!.offersIn.length;
   return (
     <section class="screen">
-      <div class="tabs">
+      <div class="tabs" role="tablist" aria-label="Voorbereiding">
         {TABS.map((t) => (
-          <button key={t} class={`tab ty ${tab === t ? 'on' : ''}`} onClick={() => setTab(t)}>
+          <button key={t} role="tab" aria-selected={tab === t} class={`tab ty ${tab === t ? 'on' : ''}`} onClick={() => setTab(t)}>
             {t.toUpperCase()}
             {t === 'kaarten' && me!.hand.length > 0 && <span class="badge">{me!.hand.length}</span>}
             {t === 'ruilen' && incoming > 0 && <span class="badge hot">{incoming}</span>}

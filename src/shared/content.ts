@@ -2,14 +2,17 @@
 
 import type { CardKind, ContractKind, Effort, EventId, PremieId, QuirkId, RaceItem, RiderType, Stat, Stats, Terrain, Weather } from './types';
 
+// Team colours avoid red, green and yellow: those carry danger, success and the leader highlight.
+// Every team also has a shape, so players who cannot tell two hues apart still can tell the teams apart.
 export const TEAM_COLORS = [
-  { name: 'Rood', hex: '#e5484d', dark: '#9c2a2e' },
-  { name: 'Blauw', hex: '#3e63dd', dark: '#2a4399' },
-  { name: 'Groen', hex: '#30a46c', dark: '#1f7048' },
-  { name: 'Geel', hex: '#f5c518', dark: '#a8860c' },
-  { name: 'Paars', hex: '#8e4ec6', dark: '#62308c' },
-  { name: 'Oranje', hex: '#f76b15', dark: '#a84708' },
+  { name: 'Blauw', hex: '#4f8dff', dark: '#2c5bc0', shape: 'circle' },
+  { name: 'Paars', hex: '#b27cff', dark: '#7547c2', shape: 'square' },
+  { name: 'Cyaan', hex: '#33d3e6', dark: '#16909f', shape: 'triangle' },
+  { name: 'Oranje', hex: '#ff8a2b', dark: '#b45a0d', shape: 'diamond' },
+  { name: 'Zilver', hex: '#e4e8f2', dark: '#8a93aa', shape: 'hexagon' },
+  { name: 'Roze', hex: '#ff7eb8', dark: '#b84a80', shape: 'plus' },
 ] as const;
+export type TeamShape = (typeof TEAM_COLORS)[number]['shape'];
 
 export const STAT_LABELS: Record<Stat, string> = {
   kracht: 'Kracht',

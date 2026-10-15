@@ -1,3 +1,11 @@
+@import '@fontsource/inter/latin-400.css';
+@import '@fontsource/inter/latin-500.css';
+@import '@fontsource/inter/latin-600.css';
+@import '@fontsource/inter/latin-700.css';
+@import '@fontsource/inter/latin-800.css';
+@import '@fontsource/barlow-condensed/latin-600.css';
+@import '@fontsource/barlow-condensed/latin-700.css';
+@import '@fontsource/barlow-condensed/latin-800.css';
 @import './visuals.css';
 @import './card.css';
 
@@ -8,7 +16,8 @@
   --panel-2: #1f2333;
   --line: #2a2f45;
   --ink: #f3f4f8;
-  --muted: #8b91ab;
+  --muted: #9aa0bb;
+  /* Yellow is the maillot jaune: the leader and the one primary action on a screen. Nothing else. */
   --accent: #ffc83d;
   --on-accent: #17140a;
   --good: #3ddc84;
@@ -18,6 +27,8 @@
   --r-md: 12px;
   --r-sm: 8px;
   --body: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Broadcast voice: headings, numbers, labels and buttons. */
+  --display: 'Barlow Condensed', 'Arial Narrow', 'Inter', system-ui, sans-serif;
   color-scheme: dark;
 }
 
@@ -39,6 +50,13 @@ body {
   font-feature-settings: 'tnum' 1;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
+  /* Pinch-zoom stays available; this only stops the double-tap zoom delay on buttons. */
+  touch-action: manipulation;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 button {
@@ -46,12 +64,22 @@ button {
   color: inherit;
 }
 
-/* Bold UI text: headings, numbers and small caps labels. `.pixel` is a legacy alias. */
+/* One keyboard focus ring for the whole product. */
+:focus-visible {
+  outline: 3px solid var(--sky);
+  outline-offset: 2px;
+}
+input:focus-visible {
+  outline: none;
+}
+
+/* Bold UI text: headings, numbers and labels. `.pixel` is a legacy alias. */
 .ty,
 .pixel {
+  font-family: var(--display);
   font-weight: 700;
-  letter-spacing: 0;
-  line-height: 1.25;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
 }
 
 .frame {
@@ -59,20 +87,51 @@ button {
   border-radius: var(--r-lg);
 }
 
+/* Team mark: colour plus shape, so teams never rely on hue alone. */
 .chip {
   display: inline-block;
   width: 0.8em;
   height: 0.8em;
   border-radius: 50%;
   vertical-align: -0.05em;
+  flex: none;
 }
+.chip[data-s='square'] {
+  border-radius: 2px;
+}
+.chip[data-s='triangle'] {
+  border-radius: 0;
+  clip-path: polygon(50% 4%, 100% 92%, 0 92%);
+}
+.chip[data-s='diamond'] {
+  border-radius: 0;
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}
+.chip[data-s='hexagon'] {
+  border-radius: 0;
+  clip-path: polygon(25% 4%, 75% 4%, 100% 50%, 75% 96%, 25% 96%, 0 50%);
+}
+.chip[data-s='plus'] {
+  border-radius: 0;
+  clip-path: polygon(35% 0, 65% 0, 65% 35%, 100% 35%, 100% 65%, 65% 65%, 65% 100%, 35% 100%, 35% 65%, 0 65%, 0 35%, 35% 35%);
+}
+
 .boot {
   height: 100%;
   display: grid;
   place-content: center;
   gap: 12px;
   text-align: center;
-  font-size: 28px;
+  font-size: 32px;
+}
+.boot .retry {
+  margin: 8px auto 0;
+  max-width: 34ch;
+  font-family: var(--body);
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--muted);
 }
 .dim {
   color: var(--muted);

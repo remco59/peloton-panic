@@ -15,7 +15,8 @@
     "balance": "tsx scripts/balance.mts"
   },
   "dependencies": {
-    "@fontsource/press-start-2p": "^5.3.0",
+    "@fontsource/barlow-condensed": "^5.3.0",
+    "@fontsource/inter": "^5.3.0",
     "express": "^5.3.0",
     "preact": "^11.0.1",
     "qrcode": "^1.5.4",
@@ -26,6 +27,7 @@
     "@types/node": "^26.6.5",
     "@types/qrcode": "^1.5.6",
     "@types/ws": "^8.18.2",
+    "playwright-core": "^1.64.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.4",
