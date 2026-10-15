@@ -17,7 +17,7 @@ body {
   text-align: center;
 }
 .small {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -46,7 +46,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -147,7 +147,7 @@ button:disabled {
   font-weight: 700;
 }
 .bar .ph {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -171,7 +171,7 @@ button:disabled {
 .offline {
   background: var(--bad);
   color: #fff;
-  font-size: 12px;
+  font-size: 13px;
   padding: 6px;
   text-align: center;
 }
@@ -247,7 +247,7 @@ main {
   gap: 10px;
 }
 .crown {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.08em;
   color: var(--accent);
@@ -372,7 +372,7 @@ p {
   justify-content: space-between;
   align-items: baseline;
   gap: 8px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .hand {
   display: grid;
@@ -399,7 +399,7 @@ p {
   font-weight: 800;
 }
 .card .sub {
-  font-size: 12px;
+  font-size: 13px;
   text-align: center;
   line-height: 1.2;
   color: rgba(22, 25, 38, 0.62);
@@ -570,7 +570,7 @@ p {
   background: transparent;
   padding: 11px 4px;
   border-radius: var(--r-sm);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.06em;
   color: var(--muted);
 }
@@ -584,7 +584,7 @@ p {
   border-radius: 999px;
   background: var(--panel-2);
   color: var(--ink);
-  font-size: 12px;
+  font-size: 13px;
 }
 .tab.on .badge {
   background: var(--bg);
@@ -621,7 +621,7 @@ p {
   grid-template-columns: 1fr 22px;
   grid-template-areas: 'l v' 't t';
   gap: 3px 6px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
 }
 .sb .sl {
@@ -768,7 +768,7 @@ p {
   border: 0;
   border-radius: var(--r-md);
   background: var(--panel-2);
-  font-size: 12px;
+  font-size: 13px;
 }
 .eff .ty {
   font-size: 13px;
@@ -780,7 +780,7 @@ p {
 }
 .eff .en {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 .eff.on {
   background: var(--accent);
@@ -1206,7 +1206,7 @@ select.pick {
 .profile .flag {
   position: absolute;
   transform: translateX(-4px);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.04em;
   color: var(--accent);
@@ -1269,7 +1269,7 @@ select.pick {
   position: absolute;
   right: 0;
   top: 8px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--ink);
   display: none;
 }
@@ -1277,7 +1277,7 @@ select.pick {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 12px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
 }
 .legend .pf {
@@ -1323,7 +1323,7 @@ select.pick {
   border-radius: 999px;
   background: var(--accent);
   color: var(--on-accent);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.04em;
   white-space: nowrap;
 }
@@ -1343,10 +1343,10 @@ select.pick {
   padding: 7px 2px;
 }
 .efforts.four .eff .ty {
-  font-size: 12px;
+  font-size: 13px;
 }
 .efforts.four .eff .en {
-  font-size: 12px;
+  font-size: 13px;
 }
 .eff.help .mv {
   color: var(--good);
@@ -1410,7 +1410,7 @@ select.pick {
   border-radius: var(--r-md);
   background: var(--panel-2);
   color: var(--text);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1;
   padding: 7px 9px;
@@ -1494,7 +1494,7 @@ select.pick {
 }
 .stand-row .tl {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 .stand-row .gl {
   text-align: right;
@@ -1502,7 +1502,7 @@ select.pick {
 }
 .stand-row .gl.ok {
   color: var(--accent);
-  font-size: 12px;
+  font-size: 13px;
 }
 .stand-gap {
   margin-left: calc(2ch + 6px + 6px + 4px);
@@ -1511,7 +1511,7 @@ select.pick {
   display: flex;
   align-items: center;
   border-left: 2px dashed var(--line);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--muted);
@@ -1526,7 +1526,7 @@ select.pick {
   position: absolute;
   left: 0;
   top: 0;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.04em;
   color: var(--muted);
@@ -1569,7 +1569,7 @@ select.pick {
   gap: 8px;
 }
 .cand .price {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--accent);
 }
 .cand .price.free {
@@ -1715,7 +1715,7 @@ select.pick {
   grid-template-columns: repeat(2, 1fr);
 }
 .tabs.two .tab {
-  font-size: 12px;
+  font-size: 13px;
   padding: 11px 4px;
 }
 .tabs.two .tab .badge {
@@ -1731,7 +1731,7 @@ select.pick {
 }
 .ct-tag {
   text-align: center;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
