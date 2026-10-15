@@ -55,11 +55,21 @@ function lobby(n: number, seed = 42): GameState {
   return s;
 }
 
-/** Start het seizoen en slaat de uitleg over: het rekruteren is open. */
-const briefed = (n = 3, seed = 42) => reduce(reduce(lobby(n, seed), { type: 'start' }), { type: 'briefDone' });
+/** Start het seizoen en slaat de uitleg over: de sponsorstap van de winkel is open. */
+const atSponsors = (n = 3, seed = 42) => reduce(reduce(lobby(n, seed), { type: 'start' }), { type: 'briefDone' });
+
+/** Laat elk team op klaar drukken in de sponsorstap, zonder te tekenen. */
+function skipSponsors(s: GameState): GameState {
+  if (s.phase === 'sponsors') for (const t of s.teams) s = reduce(s, { type: 'ready', teamId: t.id });
+  return s;
+}
+
+/** Start het seizoen, slaat de uitleg en de sponsors over: het rekruteren van renners is open. */
+const briefed = (n = 3, seed = 42) => skipSponsors(atSponsors(n, seed));
 
 /** Koopt per team de drie goedkoopste (gratis) renners en zet op klaar: zo houdt elk team zijn startmunten. */
 function finishRecruit(s: GameState): GameState {
+  s = skipSponsors(s);
   if (s.phase === 'recruit') {
     for (const t of s.teams) {
       const riders = s.recruit!.shops[t.id]
@@ -185,7 +195,7 @@ describe('uitleg vooraf', () => {
     expect(toPublic(s).briefing!.ok[s.teams[0].id]).toBe(true);
     expect(toPublic(s).briefing!.ok[s.teams[1].id]).toBe(false);
     s = reduce(s, { type: 'briefDone' });
-    expect(s.phase).toBe('recruit');
+    expect(s.phase).toBe('sponsors');
     expect(s.briefing).toBeNull();
   });
 
@@ -985,8 +995,8 @@ describe('rekruteren', () => {
     s.recruit!.shops[id].filter((x): x is Extract<ShopItem, { kind: 'contract' }> => x.kind === 'contract');
 
   it('geeft elk team een eigen winkel met negen renners en zes contracten', () => {
-    const s = briefed(3);
-    expect(s.phase).toBe('recruit');
+    const s = atSponsors(3);
+    expect(s.phase).toBe('sponsors');
     expect(s.riders).toHaveLength(0);
     for (const t of s.teams) {
       expect(t.coins).toBe(START_COINS);
@@ -1005,6 +1015,47 @@ describe('rekruteren', () => {
     expect(new Set(ids).size).toBe(ids.length);
     const names = s.teams.flatMap((t) => ridersOf(s, t.id).map((r) => r.rider.name));
     expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('opent met de sponsors en toont per stap alleen sponsors of alleen renners', () => {
+    let s = atSponsors(2);
+    const [a] = s.teams;
+    expect(s.phase).toBe('sponsors');
+    expect(toPlayerView(s, a.id)!.shop.every((x) => x.kind === 'contract')).toBe(true);
+    expect(toPlayerView(s, a.id)!.shop).toHaveLength(SHOP_CONTRACTS);
+    // Renners kies je pas in de tweede stap.
+    expect(() => reduce(s, { type: 'recruit', teamId: a.id, itemId: ridersOf(s, a.id)[0].id })).toThrow(RuleError);
+    s = skipSponsors(s);
+    expect(s.phase).toBe('recruit');
+    expect(toPlayerView(s, a.id)!.shop.every((x) => x.kind === 'rider')).toBe(true);
+    expect(toPlayerView(s, a.id)!.shop).toHaveLength(9);
+  });
+
+  it('gaat naar de renners zodra alle teams hun sponsors klaar hebben, ook zonder te tekenen', () => {
+    let s = atSponsors(3);
+    s = reduce(s, { type: 'ready', teamId: s.teams[0].id });
+    s = reduce(s, { type: 'ready', teamId: s.teams[1].id });
+    expect(s.phase).toBe('sponsors');
+    s = reduce(s, { type: 'unready', teamId: s.teams[1].id });
+    s = reduce(s, { type: 'ready', teamId: s.teams[1].id });
+    s = reduce(s, { type: 'ready', teamId: s.teams[2].id });
+    expect(s.phase).toBe('recruit');
+    expect(s.ready).toEqual({});
+    expect(s.teams.every((t) => t.slots.sponsor.length === 0 && t.coins === START_COINS)).toBe(true);
+  });
+
+  it('sponsorgeld uit de eerste stap is te besteden aan renners in de tweede', () => {
+    let s = atSponsors(2);
+    const t = s.teams[0];
+    const cash = contractsOf(s, t.id).filter((c) => (CARD_DEFS[c.def].signing ?? 0) > 0);
+    expect(cash.length).toBeGreaterThan(0);
+    s = reduce(s, { type: 'recruit', teamId: t.id, itemId: cash[0].id });
+    const coins = s.teams[0].coins;
+    expect(coins).toBeGreaterThan(START_COINS);
+    s = skipSponsors(s);
+    expect(s.phase).toBe('recruit');
+    expect(s.teams[0].coins).toBe(coins);
+    expect(s.teams[0].slots.sponsor).toHaveLength(1);
   });
 
   it('laat teams tegelijk kopen, trekt de prijs af en laat andere winkels ongemoeid', () => {
@@ -1037,7 +1088,7 @@ describe('rekruteren', () => {
   });
 
   it('een contract is gratis, betaalt bij het tekenen uit en past maximaal twee keer', () => {
-    let s = briefed(2);
+    let s = atSponsors(2);
     const t = s.teams[0];
     s = reduce(s, { type: 'recruit', teamId: t.id, itemId: contractsOf(s, t.id)[0].id });
     s = reduce(s, { type: 'recruit', teamId: t.id, itemId: contractsOf(s, t.id)[0].id });
@@ -1052,14 +1103,28 @@ describe('rekruteren', () => {
     let s = briefed(2);
     const t = s.teams[0];
     expect(() => reduce(s, { type: 'ready', teamId: t.id })).toThrow(RuleError);
-    for (const r of ridersOf(s, t.id).filter((x) => x.price === 0).slice(0, 3))
-      s = reduce(s, { type: 'recruit', teamId: t.id, itemId: r.id });
+    const free = ridersOf(s, t.id).filter((x) => x.price === 0);
+    for (const r of free.slice(0, 3)) s = reduce(s, { type: 'recruit', teamId: t.id, itemId: r.id });
     s = reduce(s, { type: 'ready', teamId: t.id });
     expect(s.phase).toBe('recruit');
+    expect(() => reduce(s, { type: 'recruit', teamId: t.id, itemId: ridersOf(s, t.id)[0].id })).toThrow(RuleError);
+    s = reduce(s, { type: 'unready', teamId: t.id });
+    expect(s.ready[t.id]).toBe(false);
+  });
+
+  it('klaar blokkeert ook het tekenen van sponsors, tot je het weghaalt', () => {
+    let s = atSponsors(2);
+    const t = s.teams[0];
+    s = reduce(s, { type: 'ready', teamId: t.id });
     expect(() => reduce(s, { type: 'recruit', teamId: t.id, itemId: contractsOf(s, t.id)[0].id })).toThrow(RuleError);
     s = reduce(s, { type: 'unready', teamId: t.id });
     s = reduce(s, { type: 'recruit', teamId: t.id, itemId: contractsOf(s, t.id)[0].id });
     expect(s.teams[0].slots.sponsor).toHaveLength(1);
+  });
+
+  it('sponsors teken je niet meer in de rekruteerstap', () => {
+    const s = briefed(2);
+    expect(() => reduce(s, { type: 'recruit', teamId: s.teams[0].id, itemId: contractsOf(s, s.teams[0].id)[0].id })).toThrow(RuleError);
   });
 
   it('gaat naar de namen zodra iedereen klaar is, met drie renners per team', () => {
@@ -1072,6 +1137,14 @@ describe('rekruteren', () => {
     }
     expect(s.riders).toHaveLength(4 * RECRUIT_PICKS);
     expect(new Set(s.riders.map((r) => r.name)).size).toBe(s.riders.length);
+  });
+
+  it('time-out in de sponsorstap tekent automatisch en gaat door naar de renners', () => {
+    let s = atSponsors(3);
+    s = reduce(s, { type: 'timeout' });
+    expect(s.phase).toBe('recruit');
+    expect(s.ready).toEqual({});
+    for (const t of s.teams) expect(t.slots.sponsor).toHaveLength(2);
   });
 
   it('time-out winkelt automatisch en eindigt de fase', () => {
@@ -1090,6 +1163,12 @@ describe('rekruteren', () => {
     let s = reduce(lobby(2, 3), { type: 'join', name: 'Bot', isBot: true });
     s = reduce(reduce(s, { type: 'start' }), { type: 'briefDone' });
     const bot = s.teams.find((t) => t.isBot)!;
+    expect(s.phase).toBe('sponsors');
+    for (let i = 0; i < 20 && !s.ready[bot.id]; i++) s = reduce(s, botShopStep(s, bot.id, rand)!);
+    expect(s.teams.find((t) => t.id === bot.id)!.slots.sponsor).toHaveLength(2);
+    // De mens slaat de sponsors over: nu zijn de renners aan de beurt.
+    for (const t of s.teams.filter((x) => !x.isBot)) s = reduce(s, { type: 'ready', teamId: t.id });
+    expect(s.phase).toBe('recruit');
     for (let i = 0; i < 20 && !s.ready[bot.id]; i++) s = reduce(s, botShopStep(s, bot.id, rand)!);
     const team = s.teams.find((t) => t.id === bot.id)!;
     expect(s.ready[bot.id]).toBe(true);
@@ -1105,7 +1184,7 @@ describe('rekruteren', () => {
     expect(s.riders).toHaveLength(0);
     expect(s.teams.every((t) => t.riderIds.length === 0)).toBe(true);
     s = reduce(reduce(s, { type: 'start' }), { type: 'briefDone' });
-    expect(s.phase).toBe('recruit');
+    expect(s.phase).toBe('sponsors');
     expect(s.teams.every((t) => t.coins === START_COINS)).toBe(true);
   });
 });
@@ -1113,7 +1192,7 @@ describe('rekruteren', () => {
 describe('sponsorcontracten', () => {
   /** Team 0 tekent dit contract in de winkel; daarna wordt er verder gerekruteerd tot de draft. */
   const withContract = (def: string): GameState => {
-    let s = briefed(3, 8);
+    let s = atSponsors(3, 8);
     s.recruit!.shops[s.teams[0].id].push({ id: 'c-test', kind: 'contract', def });
     s = reduce(s, { type: 'recruit', teamId: s.teams[0].id, itemId: 'c-test' });
     return finishRecruit(s);
@@ -1409,12 +1488,18 @@ describe('namen geven', () => {
   it('bots zijn meteen klaar', () => {
     let s = reduce(lobby(1, 4), { type: 'join', name: 'Bot', isBot: true });
     s = reduce(reduce(s, { type: 'start' }), { type: 'briefDone' });
-    let a = botShopStep(s, s.teams[1].id, () => 0.5);
-    while (a) {
-      s = reduce(s, a);
-      a = botShopStep(s, s.teams[1].id, () => 0.5);
-    }
+    const shopBot = () => {
+      let a = botShopStep(s, s.teams[1].id, () => 0.5);
+      while (a) {
+        s = reduce(s, a);
+        a = botShopStep(s, s.teams[1].id, () => 0.5);
+      }
+    };
+    shopBot();
     const human = s.teams[0].id;
+    s = reduce(s, { type: 'ready', teamId: human });
+    expect(s.phase).toBe('recruit');
+    shopBot();
     for (const r of s.recruit!.shops[human].filter((x) => x.kind === 'rider' && x.price === 0).slice(0, 3))
       s = reduce(s, { type: 'recruit', teamId: human, itemId: r.id });
     s = reduce(s, { type: 'ready', teamId: human });

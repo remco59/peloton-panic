@@ -81,18 +81,35 @@ export function stageLines(s: PublicState): Line[] {
 
 // ---- Rekruteren ---------------------------------------------------------------
 
-export function recruitIntroLines(s: PublicState): Line[] {
+export function sponsorsIntroLines(s: PublicState): Line[] {
   return [
     j(
       choice([
-        `Voor de start van het seizoen: de transfermarkt. ${s.teams.length} ploegen met elk tien euro en een eigen winkel vol renners en sponsors.`,
-        `Eerst de ploeg samenstellen. ${s.teams.length} managers, elk met tien euro, en een eigen etalage om uit te kiezen.`,
+        `Voor de start van het seizoen: de sponsors. ${s.teams.length} ploegen met elk tien euro en een eigen winkel vol contracten.`,
+        `Eerst het geld regelen. ${s.teams.length} managers, elk met tien euro, en een eigen stapel sponsorcontracten om uit te kiezen.`,
       ]),
     ),
     m(
       choice([
-        'Drie renners en maximaal twee sponsors. Sommige sponsors betalen meteen, andere pas als je wint, en weer andere leveren gewoon spullen.',
-        'Neo-profs zijn gratis, sterren kosten munten. Een sponsor kost niets, maar je kunt er maar twee op je shirt kwijt.',
+        'Maximaal twee sponsors. Sommige betalen meteen, andere pas als je wint, en weer andere leveren gewoon spullen.',
+        'Een sponsor kost niets, maar je kunt er maar twee op je shirt kwijt. Wat ze nu betalen, kun je straks aan renners uitgeven.',
+      ]),
+    ),
+  ];
+}
+
+export function recruitIntroLines(s: PublicState): Line[] {
+  return [
+    j(
+      choice([
+        `De sponsors zijn getekend, nu de renners. ${s.teams.length} ploegen en elk een eigen etalage vol kandidaten.`,
+        `En dan de ploeg zelf samenstellen. ${s.teams.length} managers, elk met een eigen winkel vol renners.`,
+      ]),
+    ),
+    m(
+      choice([
+        'Kies drie renners. Neo-profs zijn gratis, sterren kosten munten, en een mix van types is meestal slimmer dan drie keer dezelfde.',
+        'Drie renners per ploeg. Kijk naar het parcours en naar wat je nog in kas hebt.',
       ]),
     ),
   ];
@@ -876,6 +893,7 @@ export function finishLines(s: PublicState): Line[] {
 // ---- Tutorial ----------------------------------------------------------------
 
 export type TutorialTopic =
+  | 'sponsors'
   | 'recruit'
   | 'draft'
   | 'team'
@@ -894,10 +912,15 @@ export type TutorialTopic =
  */
 export function tutorialLines(topic: TutorialTopic, _s: PublicState): Line[] {
   switch (topic) {
+    case 'sponsors':
+      return [
+        f('Het seizoen begint in de winkel, eerst met de sponsors. Iedereen heeft zijn eigen winkel, met tien euro om uit te geven. Teken maximaal twee sponsors.'),
+        f('Sponsors kosten niets: sommige betalen meteen, sommige als je presteert, andere leveren spullen. Wat ze meteen betalen, kun je straks aan renners uitgeven.'),
+      ];
     case 'recruit':
       return [
-        f('Het seizoen begint in de winkel. Iedereen heeft zijn eigen winkel, met tien euro om uit te geven. Kies drie renners en teken maximaal twee sponsors.'),
-        f('Neo-profs zijn gratis, talenten en sterren kosten munten. Sponsors kosten niets: sommige betalen meteen, sommige als je presteert, andere leveren spullen. Maak een mix: een klimmer voor de bergen, een sprinter voor de finish, en misschien een knecht.'),
+        f('Nu de renners. Kies er drie uit je eigen winkel. Neo-profs zijn gratis, talenten en sterren kosten munten.'),
+        f('Maak een mix: een klimmer voor de bergen, een sprinter voor de finish, en misschien een knecht. Wat je overhoudt, kun je later aan kaarten uitgeven.'),
       ];
     case 'draft':
       return [

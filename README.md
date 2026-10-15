@@ -36,8 +36,14 @@ iedereen op *Ik snap het*. Pas daarna begint de draft. De tekst staat in `BRIEFI
 
 Na de uitleg heeft **elk team een eigen, privé winkel**. Er is geen gedeelde pool en geen beurtvolgorde:
 iedereen winkelt tegelijk op zijn telefoon (de tv toont per team hoe ver het is). Je start met
-**€ 10** en kiest **drie renners** en maximaal **twee sponsors**. Druk op **Klaar** als je tevreden
-bent; zodra iedereen klaar is (of de timer afloopt) gaat het spel door.
+**€ 10** en winkelt in twee stappen, elk met een eigen timer:
+
+1. **Sponsors** (75 seconden): teken maximaal **twee sponsors**, of geen. Wat een sponsor meteen
+   betaalt, kun je in de tweede stap aan renners uitgeven.
+2. **Renners** (150 seconden): kies **drie renners** met het budget dat overblijft.
+
+Druk per stap op **Klaar** als je tevreden bent; zodra iedereen klaar is (of de timer afloopt) gaat
+het spel door naar de volgende stap. De tijden staan in `TIMING` in `src/server/rooms.ts`.
 
 ### Renners
 

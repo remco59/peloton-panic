@@ -195,6 +195,14 @@ async function main() {
       });
       return;
     }
+    if (s.phase === 'sponsors') {
+      // Eerst de sponsors: teken de eerste twee contracten en ga door.
+      once('sponsors', () => {
+        for (const x of c.me!.shop.filter((i) => i.kind === 'contract').slice(0, 2)) c.act({ type: 'recruit', itemId: x.id });
+        c.act({ type: 'ready' });
+      });
+      return;
+    }
     if (s.phase === 'recruit') {
       // Winkel leeg: eerst een screenshot van de winkel, dan de goedkoopste drie renners en klaar.
       const buy = () => {
