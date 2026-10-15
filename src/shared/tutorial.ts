@@ -1,6 +1,7 @@
 // Tutorial-inhoud: korte, concrete uitleg per fase, voor de telefoon en de tv.
 // De tutorial is geen apart spel: iedereen speelt gewoon mee en deze kaarten verschijnen erbij.
 
+import { START_COINS } from './types';
 import type { PublicState } from './types';
 
 export type PhoneTab = 'plan' | 'kaarten' | 'team' | 'winkel' | 'ruilen';
@@ -33,36 +34,28 @@ export function phoneHint(s: PublicState, c: HintContext): Hint | null {
             title: 'Zo begin je',
             steps: [
               'Te weinig spelers? Voeg bots toe met + BOT.',
-              'Druk op Start het seizoen als iedereen binnen is. Daarna rekruteert iedereen eerst drie renners.',
+              'Druk op Start het seizoen als iedereen binnen is. Daarna winkelt iedereen eerst in zijn eigen winkel.',
               'Daarna ben je 3 etappes bezig.',
             ],
           }
         : {
             id: 'lobby-player',
             title: 'Even wachten',
-            steps: ['Je rekruteert straks je eigen drie renners.', 'De president start het seizoen zodra iedereen er is.'],
+            steps: ['Je winkelt straks in je eigen winkel: drie renners en sponsors.', 'De president start het seizoen zodra iedereen er is.'],
           };
     case 'briefing':
       return null; // de uitleg vooraf is zelf het scherm
     case 'recruit':
-      return c.myTurn
-        ? {
-            id: 'recruit-turn',
-            title: 'Rekruteer een renner',
-            steps: [
-              'Tik op een renner om hem te contracteren. Je kiest er drie, om de beurt.',
-              'Sterren en talenten kosten munten. Die munten heb je ook nodig voor kaarten, dus kies met zorg.',
-              'Kijk naar het type: sprinters winnen sprints, klimmers dansen in de bergen, knechten trekken je kopman.',
-            ],
-          }
-        : {
-            id: 'recruit-wait',
-            title: 'Wacht op je beurt',
-            steps: [
-              'Iedereen kiest uit dezelfde pool. Kijk alvast wie je wilt hebben.',
-              'Je maakt een ploeg van drie. Je hebt een mix van types nodig: niet elke etappe is een sprint.',
-            ],
-          };
+      return {
+        id: 'recruit-shop',
+        title: 'Je eigen winkel',
+        steps: [
+          `Iedereen heeft een eigen winkel, dus je hoeft niet op een ander te wachten. Je begint met € ${START_COINS}.`,
+          'Tab Renners: kies er drie. Neo-profs zijn gratis, talenten en sterren kosten munten. Maak een mix van types.',
+          'Tab Sponsors: teken er maximaal twee. Ze kosten niets. Sommige betalen meteen, sommige alleen als je presteert, en sommige leveren spullen.',
+          'Munten die je overhoudt, heb je later nodig voor kaarten. Druk op Klaar als je er drie hebt.',
+        ],
+      };
     case 'naming':
       return {
         id: 'naming',
@@ -76,7 +69,7 @@ export function phoneHint(s: PublicState, c: HintContext): Hint | null {
             title: 'Jij bent aan de beurt',
             steps: [
               'Tik bij een kaart op Pak deze, of trek een onbekende van de stapel.',
-              'Sponsors geven munten. Staf en materiaal helpen in de race. Training maakt een renner sterker.',
+              'Staf en materiaal helpen in de race. Training maakt een renner sterker. Sponsors heb je al in de winkel getekend.',
               'Je kunt straks nog kaarten kopen en ruilen, dus pak wat je nu het hardst nodig hebt.',
             ],
           }
@@ -107,7 +100,7 @@ export function phoneHint(s: PublicState, c: HintContext): Hint | null {
             c.handCount === 0
               ? 'Je hebt nog geen kaarten. Haal er een paar via Winkel of Ruilen.'
               : 'Trainingskaart: tik op de naam van de renner. Die wordt sterker, maar ook vermoeider.',
-            'Staf, materiaal, sponsor of wagen: tik op Op je bord leggen. Die werken de hele etappe.',
+            'Staf, materiaal of wagen: tik op Op je bord leggen. Die werken de hele etappe.',
             'Sabotage: kies een tegenstander. Het is een lichte hinder, nooit een uitschakeling.',
             READY_STEP,
           ],
@@ -126,7 +119,7 @@ export function phoneHint(s: PublicState, c: HintContext): Hint | null {
           id: 'team-winkel',
           title: 'Winkel',
           steps: [
-            'Munten verdien je met sponsors en uitslagen.',
+            'Munten verdien je met je sponsors en de uitslag.',
             'Een kaart uit de markt kost de prijs op de kaart. Blind trekken kost € 2.',
             'Spaar niet te lang: ongebruikte munten leveren niets op.',
             READY_STEP,
@@ -202,7 +195,7 @@ export function tvHint(s: PublicState): { title: string; text: string } | null {
     case 'lobby':
       return { title: 'Meedoen', text: 'Scan de QR-code met je telefoon. De eerste speler is president en start het seizoen.' };
     case 'recruit':
-      return { title: 'Rekruteren', text: 'Om de beurt contracteert elk team drie renners uit dezelfde pool. Sterren kosten munten, neo-profs zijn gratis.' };
+      return { title: 'De winkel', text: 'Iedereen winkelt tegelijk in zijn eigen winkel: kies drie renners en maximaal twee sponsors. Sterren kosten munten, neo-profs en sponsors zijn gratis.' };
     case 'naming':
       return { title: 'Namen', text: 'Op je telefoon: geef je renners een naam en druk op Klaar. Er is geen timer.' };
     case 'draft':

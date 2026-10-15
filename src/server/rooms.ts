@@ -4,6 +4,7 @@
 import { randomInt, randomUUID } from 'node:crypto';
 import type { WebSocket } from 'ws';
 import {
+  contractLines,
   eventLines,
   finishLines,
   introLines,
@@ -22,7 +23,7 @@ import type { Line, TutorialTopic } from '../shared/commentary';
 import {
   botDraft,
   botRacePlan,
-  botRecruit,
+  botShopStep,
   botStep,
   createGame,
   reduce,
@@ -36,7 +37,7 @@ import type { Action, GameState } from '../shared/types';
 import { warm } from './tts';
 
 export const TIMING = {
-  recruitMs: 25_000,
+  recruitMs: 90_000, // iedereen winkelt tegelijk in zijn eigen winkel
   draftMs: 20_000,
   teamMs: 90_000,
   raceMs: 30_000, // naast het tempo kies je ook volgauto en kaarten
@@ -201,7 +202,7 @@ export class Room {
     const s = this.state;
 
     if (action.type === 'draftPick') this.commentPick(prev, action.teamId, action.source);
-    if (action.type === 'recruit') this.commentRecruit(prev, action.teamId, action.index);
+    if (action.type === 'recruit') this.commentRecruit(prev, action.teamId, action.itemId);
     // Bij het bladeren door de uitleg leest een commentator de samenvatting van de nieuwe pagina voor.
     if (action.type === 'briefPage' && s.briefing && s.briefing.page !== prev.briefing?.page) {
       const say = BRIEFING[s.briefing.page]?.say;
@@ -210,13 +211,11 @@ export class Room {
     if (action.type === 'setTutorial' || action.type === 'rematch') this.explained.clear();
 
     const draftTurn = (x: GameState) => (x.phase === 'draft' && x.draft ? x.draft.idx : -1);
-    const recruitTurn = (x: GameState) => (x.phase === 'recruit' && x.recruit ? x.recruit.idx : -1);
     const changed =
       prev.phase !== s.phase ||
       prev.round !== s.round ||
       prev.stage !== s.stage ||
-      draftTurn(prev) !== draftTurn(s) ||
-      recruitTurn(prev) !== recruitTurn(s);
+      draftTurn(prev) !== draftTurn(s);
     if (changed) this.onEnter(prev);
     this.broadcast();
   }
@@ -229,11 +228,11 @@ export class Room {
     if (def) this.say(pickLines(team.name, def));
   }
 
-  private commentRecruit(prev: GameState, teamId: string, index: number): void {
+  private commentRecruit(prev: GameState, teamId: string, itemId: string): void {
     const team = this.state.teams.find((t) => t.id === teamId);
-    const cand = prev.recruit?.market[index];
-    if (!team || !cand) return;
-    this.say(recruitLines(team.name, cand.rider, cand.price));
+    const item = prev.recruit?.shops[teamId]?.find((x) => x.id === itemId);
+    if (!team || !item) return;
+    this.say(item.kind === 'rider' ? recruitLines(team.name, item.rider, item.price) : contractLines(team.name, item.def));
   }
 
   private clearTimers(): void {
@@ -272,11 +271,9 @@ export class Room {
         break;
       }
       case 'recruit': {
-        const first = s.recruit?.idx === 0;
-        if (first) this.say([...recruitIntroLines(pub), ...this.explain('recruit')]);
+        this.say([...recruitIntroLines(pub), ...this.explain('recruit')]);
         this.setPhaseTimer(this.scaled(TIMING.recruitMs), { type: 'timeout' });
         this.scheduleBotRecruit();
-        this.nudgeRecruitTurn();
         break;
       }
       case 'naming': {
@@ -357,31 +354,20 @@ export class Room {
     ]);
   }
 
-  /** Met tutorial aan: zeg wie er aan de beurt is om te rekruteren. */
-  private nudgeRecruitTurn(): void {
-    if (!this.state.tutorial) return;
-    const id = this.state.recruit ? this.state.recruit.order[this.state.recruit.idx] : null;
-    const team = this.state.teams.find((t) => t.id === id);
-    if (!team || team.isBot) return;
-    this.say([{ speaker: 'fenna', text: `${team.name}, jij bent aan de beurt. Kies een renner op je telefoon.` }]);
-  }
-
   // ---- Bots ----
 
   private scheduleBotRecruit(): void {
-    const s = this.state;
-    const teamId = s.recruit ? s.recruit.order[s.recruit.idx] : null;
-    const team = s.teams.find((t) => t.id === teamId);
-    if (!team?.isBot) return;
-    this.after(
-      1400 + Math.random() * 2000,
-      () => {
-        const r = this.state.recruit;
-        if (this.state.phase !== 'recruit' || !r || r.order[r.idx] !== team.id) return;
-        this.dispatch({ type: 'recruit', teamId: team.id, index: botRecruit(this.state, team.id, Math.random) });
-      },
-      true,
-    );
+    for (const t of this.state.teams) {
+      if (!t.isBot) continue;
+      const step = () => {
+        if (this.state.phase !== 'recruit') return;
+        const next = botShopStep(this.state, t.id, Math.random);
+        if (!next) return;
+        this.dispatch(next);
+        this.after(900 + Math.random() * 1400, step, true);
+      };
+      this.after(1500 + Math.random() * 3000, step, true);
+    }
   }
 
   private scheduleBotDraft(): void {

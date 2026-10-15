@@ -1653,3 +1653,57 @@ select.pick {
   top: -2px;
   z-index: 5;
 }
+
+/* Je eigen winkel: budget, tabs en sponsorcontracten. */
+.shop-bar {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 14px;
+}
+.shop-bar > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.shop-bar b {
+  font-size: 15px;
+}
+.shop-mine {
+  flex: none;
+  color: var(--muted);
+}
+.tabs.two {
+  flex: none;
+  grid-template-columns: repeat(2, 1fr);
+}
+.tabs.two .tab {
+  font-size: 11px;
+  padding: 11px 4px;
+}
+.tabs.two .tab .badge {
+  position: static;
+  margin-left: 6px;
+  padding: 1px 6px;
+}
+.ct {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+.ct-tag {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ct-tag.cash {
+  color: var(--good);
+}
+.ct-tag.bonus {
+  color: var(--accent);
+}
