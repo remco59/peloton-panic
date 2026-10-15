@@ -19,6 +19,7 @@ import {
 import type { PodiumEntry } from '../common/visuals';
 import './play.css';
 import { installClickSounds, useCues } from './cues';
+import { CardReveal, useReveal } from './reveal';
 import {
   BRIEFING,
   CARD_DEFS,
@@ -443,7 +444,7 @@ interface GameProps extends ViewProps {
 
 function Game({
   view,
-  act,
+  act: send,
   president,
   takeover,
   error,
@@ -453,6 +454,11 @@ function Game({
 }: GameProps & { takeover: () => void; error: string | null; online: boolean; clock: () => number; leave: () => void }) {
   useNow(500);
   useCues(view, error);
+  const { reveal, note, close: closeReveal } = useReveal(view.me?.hand);
+  const act = (a: PlayerAction) => {
+    note(a);
+    send(a);
+  };
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   const { state, me, teamId } = view;
   const team = state.teams.find((t) => t.id === teamId);
@@ -525,6 +531,7 @@ function Game({
           {state.phase === 'finished' && <Finished view={view} president={president} />}
         </main>
       </HintSlot.Provider>
+      {reveal && <CardReveal key={reveal.card.id} reveal={reveal} deckCount={state.deckCount} onClose={closeReveal} />}
     </div>
   );
 }
