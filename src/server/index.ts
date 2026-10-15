@@ -139,6 +139,11 @@ function handle(ws: WebSocket, conn: Conn, msg: ClientMsg): void {
       conn.room.tvControl(msg.what);
       return;
     }
+    case 'tv:kick': {
+      if (conn.role !== 'tv' || !conn.room) return;
+      conn.room.kick(msg.teamId);
+      return;
+    }
     case 'player:join': {
       const room = getRoom(msg.code);
       if (!room) return void send(ws, { t: 'error', message: 'No room with that code', fatal: true });
@@ -150,17 +155,17 @@ function handle(ws: WebSocket, conn: Conn, msg: ClientMsg): void {
       return;
     }
     case 'act': {
-      if (conn.role !== 'player' || !conn.room || !conn.teamId) return;
+      if (conn.role !== 'player' || !conn.room || !conn.teamId || !conn.room.hasSeat(conn.teamId, ws)) return;
       conn.room.playerAct(conn.teamId, msg.action);
       return;
     }
     case 'takeover': {
-      if (conn.role !== 'player' || !conn.room || !conn.teamId) return;
+      if (conn.role !== 'player' || !conn.room || !conn.teamId || !conn.room.hasSeat(conn.teamId, ws)) return;
       conn.room.takeover(conn.teamId);
       return;
     }
     case 'president': {
-      if (conn.role !== 'player' || !conn.room || !conn.teamId) return;
+      if (conn.role !== 'player' || !conn.room || !conn.teamId || !conn.room.hasSeat(conn.teamId, ws)) return;
       conn.room.president(conn.teamId, msg.what);
       return;
     }

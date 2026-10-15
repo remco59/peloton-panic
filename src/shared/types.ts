@@ -447,4 +447,5 @@ export type Action =
   | { type: 'nextStage' }
   | { type: 'rematch' }
   | { type: 'stop' }
+  | { type: 'kick'; teamId: string }
   | { type: 'removeBot' };

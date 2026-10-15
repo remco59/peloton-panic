@@ -177,7 +177,7 @@ function App() {
 
   return (
     <div class="tv">
-      <Header snap={snap} clock={clock} online={online} onStop={() => control('stop')} />
+      <Header snap={snap} clock={clock} online={online} onStop={() => control('stop')} onKick={(teamId) => sock.current?.send({ t: 'tv:kick', teamId })} />
       <div class="main">
         <Stage state={state}>{inRace && <TutorialCard state={state} variant="lower" />}</Stage>
         <aside class={`side ${veiled ? 'veiled' : ''}`}>
@@ -207,7 +207,19 @@ function App() {
 
 // ---- Onderdelen ---------------------------------------------------------------
 
-function Header({ snap, clock, online, onStop }: { snap: Snapshot; clock: () => number; online: boolean; onStop: () => void }) {
+function Header({
+  snap,
+  clock,
+  online,
+  onStop,
+  onKick,
+}: {
+  snap: Snapshot;
+  clock: () => number;
+  online: boolean;
+  onStop: () => void;
+  onKick: (teamId: string) => void;
+}) {
   useNow(250);
   const [confirming, setConfirming] = useState(false);
   useEffect(() => {
@@ -255,6 +267,7 @@ function Header({ snap, clock, online, onStop }: { snap: Snapshot; clock: () => 
           ''
         )}
         {!online && <span class="bad"> OFFLINE</span>}
+        <Roster snap={snap} onKick={onKick} />
         {snap.state.phase !== 'lobby' &&
           (confirming ? (
             <span class="stop-confirm ty">
@@ -291,6 +304,66 @@ function Header({ snap, clock, online, onStop }: { snap: Snapshot; clock: () => 
         </button>
       </div>
     </header>
+  );
+}
+
+/** Spelers beheren vanaf de tv: wie er niet (meer) bij hoort, zet je eruit. */
+function Roster({ snap, onKick }: { snap: Snapshot; onKick: (teamId: string) => void }) {
+  const { state } = snap;
+  const [open, setOpen] = useState(false);
+  const [confirm, setConfirm] = useState<string | null>(null);
+  useEffect(() => {
+    if (!confirm) return;
+    const id = setTimeout(() => setConfirm(null), 5000);
+    return () => clearTimeout(id);
+  }, [confirm]);
+  const lobby = state.phase === 'lobby';
+  return (
+    <span class="roster">
+      <button class="mute ty" aria-expanded={open} onClick={() => setOpen(!open)}>
+        SPELERS
+      </button>
+      {open && (
+        <div class="roster-pop frame" role="dialog" aria-label="Spelers">
+          {state.teams.length === 0 && <p class="dim">Nog niemand.</p>}
+          {state.teams.map((t) => {
+            // Een bot midden in het seizoen kun je niet weghalen: de stand verwijst nog naar het team.
+            const removable = !t.isBot || lobby;
+            const status = t.isBot
+              ? 'bot'
+              : snap.autopilot[t.id]
+                ? 'bot speelt mee'
+                : !snap.connected[t.id]
+                  ? 'weg'
+                  : '';
+            return (
+              <div class="roster-row" key={t.id}>
+                <span class="chip" data-s={colorOf(t).shape} style={{ background: colorOf(t).hex }} />
+                <span class="rn">{t.name}</span>
+                {status && <span class="dim">{status}</span>}
+                {removable &&
+                  (confirm === t.id ? (
+                    <button
+                      class="mute stop yes ty"
+                      onClick={() => {
+                        setConfirm(null);
+                        onKick(t.id);
+                      }}
+                    >
+                      ZEKER?
+                    </button>
+                  ) : (
+                    <button class="mute stop ty" onClick={() => setConfirm(t.id)}>
+                      {t.isBot ? 'VERWIJDER' : 'ZET ERUIT'}
+                    </button>
+                  ))}
+              </div>
+            );
+          })}
+          {!lobby && <p class="dim s">Een speler die eruit gaat, wordt vervangen door een bot.</p>}
+        </div>
+      )}
+    </span>
   );
 }
 

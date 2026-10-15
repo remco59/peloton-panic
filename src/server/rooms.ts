@@ -373,6 +373,44 @@ export class Room {
     this.dispatch({ type: what });
   }
 
+  /**
+   * Zet een team uit het spel. In de lobby verdwijnt het team; tijdens het seizoen neemt een bot het over.
+   * De telefoon krijgt een melding en vergeet zijn stoel.
+   */
+  kick(teamId: string): void {
+    this.lastActive = Date.now();
+    const action: Action = { type: 'kick', teamId };
+    reduce(this.state, action); // gooit RuleError als het niet kan, voordat er iets verandert
+    const seat = this.seats.get(teamId);
+    if (seat) {
+      for (const ws of seat.sockets) {
+        send(ws, { t: 'error', message: 'Je bent uit het spel gezet. Je kunt opnieuw meedoen met de code.', fatal: true });
+      }
+    }
+    this.seats.delete(teamId);
+    clearTimeout(this.awayTimers.get(teamId));
+    this.awayTimers.delete(teamId);
+    this.missed.delete(teamId);
+    this.acted.delete(teamId);
+    this.autopilot.delete(teamId);
+    if (this.presidentTeamId === teamId) {
+      this.passPresident();
+      if (this.presidentTeamId === teamId) this.presidentTeamId = null;
+    }
+    this.dispatch(action);
+    // Het team is nu een bot: laat het meedoen met wat er in deze fase te doen is.
+    if (this.state.teams.some((t) => t.id === teamId)) {
+      if (this.state.phase === 'naming') {
+        if (!this.state.ready[teamId]) this.dispatch({ type: 'ready', teamId });
+      } else this.kickAuto(teamId);
+    }
+  }
+
+  /** Zit deze verbinding (nog) op deze stoel? Na een kick niet meer. */
+  hasSeat(teamId: string, ws: WebSocket): boolean {
+    return this.seats.get(teamId)?.sockets.has(ws) ?? false;
+  }
+
   /** De enige plek waar de toestand verandert: timers, bots en commentaar bij overgangen. */
   dispatch(action: Action): void {
     const prev = this.state;

@@ -17,7 +17,10 @@ export function join(s: GameState, name: string, isBot: boolean): GameState {
   const used = new Set(s.teams.map((t) => t.color));
   let color = 0;
   while (used.has(color)) color++;
-  const teamId = `t${s.teams.length + 1}`;
+  // Na een kick kan een eerder id vrij zijn gekomen: neem het laagste nummer dat niet in gebruik is.
+  let n = 1;
+  while (s.teams.some((t) => t.id === `t${n}`)) n++;
+  const teamId = `t${n}`;
   s.teams.push({
     id: teamId,
     name: clean,

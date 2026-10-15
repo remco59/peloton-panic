@@ -156,6 +156,57 @@ describe('tv controls', () => {
   });
 });
 
+describe('kicking players from the tv', () => {
+  it('removes a team in the lobby, tells the phone, and reuses the freed team id', () => {
+    const room = createRoom('http://x');
+    const wa = sock();
+    const a = room.join(wa, 'Anna');
+    const wb = sock();
+    const b = room.join(wb, 'Ben');
+    room.join(sock(), 'Carl');
+    expect(room.presidentTeamId).toBe(a.teamId);
+
+    room.kick(a.teamId);
+    expect(room.state.teams.map((t) => t.name)).toEqual(['Ben', 'Carl']);
+    expect(room.presidentTeamId).toBe(b.teamId); // de kroon gaat naar een ander
+    expect(wa.sent.some((m) => m.t === 'error' && m.fatal)).toBe(true);
+    expect(room.hasSeat(a.teamId, wa)).toBe(false);
+
+    const d = room.join(sock(), 'Dirk');
+    const ids = room.state.teams.map((t) => t.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(room.state.teams.find((t) => t.name === 'Dirk')?.id).toBe(d.teamId);
+  });
+
+  it('lets a bot take over a kicked team mid-season, and refuses to kick a bot then', () => {
+    const room = createRoom('http://x');
+    const a = room.join(sock(), 'Anna');
+    const b = room.join(sock(), 'Ben');
+    room.president(a.teamId, 'addBot');
+    room.tvControl('start');
+    room.president(a.teamId, 'briefDone');
+    expect(room.state.phase).toBe('sponsors');
+
+    room.kick(b.teamId);
+    expect(room.state.teams.find((t) => t.id === b.teamId)?.isBot).toBe(true);
+    expect(() => room.kick(b.teamId)).toThrow(RuleError);
+
+    // De bot speelt mee: na genoeg tijd is Ben's team klaar met winkelen.
+    for (let i = 0; i < 60 && !room.state.ready[b.teamId]; i++) vi.advanceTimersByTime(1_000);
+    expect(room.state.ready[b.teamId]).toBe(true);
+  });
+
+  it('ignores actions from a connection whose seat was taken away', () => {
+    const room = createRoom('http://x');
+    const wa = sock();
+    const a = room.join(wa, 'Anna');
+    room.join(sock(), 'Ben');
+    expect(room.hasSeat(a.teamId, wa)).toBe(true);
+    room.kick(a.teamId);
+    expect(room.hasSeat(a.teamId, wa)).toBe(false);
+  });
+});
+
 /** Beide winkelstappen, sponsors en dan renners, laten aflopen. */
 const SHOP_MS = TIMING.sponsorsMs + TIMING.recruitMs + 2;
 

@@ -67,6 +67,42 @@
   font-size: 1em;
 }
 
+.roster {
+  position: relative;
+  display: inline-block;
+}
+.roster-pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  z-index: 10;
+  min-width: 280px;
+  padding: 12px 14px;
+  font-family: var(--body, inherit);
+  font-size: 16px;
+  text-align: left;
+  letter-spacing: 0;
+  background: var(--panel, #161a2e);
+}
+.roster-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+.roster-row .rn {
+  flex: 1;
+  color: var(--ink);
+}
+.roster-row .mute {
+  margin-left: 0;
+  font-size: 13px;
+}
+.roster-pop .s {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+
 .big-start {
   display: block;
   margin: 20px 0 0;
