@@ -27,6 +27,7 @@ import type { PublicState, PublicTeam, Rider, Stat } from '../../shared/types';
 import { PREMIE_POINTS, STAGES } from '../../shared/types';
 import { sound } from '../common/sound';
 import { useBump, useChanged, useFlip } from '../common/motion';
+import { keepScreenOn } from '../common/wakelock';
 import { openSocket } from '../common/ws';
 import type { Socket } from '../common/ws';
 import { Broadcaster } from './broadcast';
@@ -1181,4 +1182,5 @@ function Finished({ snap, onRematch }: { snap: Snapshot; onRematch: () => void }
   );
 }
 
+keepScreenOn();
 render(<App />, document.getElementById('app')!);
