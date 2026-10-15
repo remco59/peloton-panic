@@ -192,12 +192,12 @@ De samples staan in `src/client/public/audio/`. Ze worden gemaakt met
 `python3 scripts/build-audio.py <map met mixkit-wavs> [crowd.wav]` (ffmpeg nodig), dat ze op
 gelijke luidheid brengt. De meeste komen van [Mixkit](https://mixkit.co/license/#sfxFree); het
 publiek (`crowd.mp3`) is uit een YouTube-video ("Race Crowd Cheering Ambience Sound Effect")
-gehaald, controleer de licentie ervan voordat je het spel publiek verspreidt.
+gehaald, controleer de licentie ervan voordat je het spel publiek verspreidt (zie [CREDITS.md](CREDITS.md)).
 
 ## Projectindeling
 
 ```
-src/shared/   regelmotor (pure reducer), inhoud, commentaar, protocol
+src/shared/   regelmotor (pure reducer; engine.ts + rules/ per fase), inhoud, commentaar, protocol
 src/server/   kamers, WebSocket-server, bots, TTS
 src/client/   tv/ (canvas-parcours + panelen), play/ (telefoon) en common/ (kaarten, visuals)
 scripts/      setup-tts.sh, screenshots.mts, build-audio.py
@@ -230,7 +230,7 @@ Alles wat je in één oogopslag moet snappen is getekend (SVG en CSS, geen losse
 | Commando | Wat het doet |
 | --- | --- |
 | `npm run dev` | Server plus Vite op :3000 |
-| `npm test` | Tests van de regelmotor |
+| `npm test` | Tests van de regelmotor en de kamers (GitHub Actions draait test, typecheck en build bij elke PR) |
 | `npm run typecheck` | TypeScript-controle |
 | `npm run build` / `npm start` | Productiebuild en server |
 | `npm run balance` | Simuleert honderden seizoenen met bot-strategieën en toont winkansen, racelengte en de waarde per kaart |
