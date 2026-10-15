@@ -162,6 +162,16 @@ export function finishSeason(s: GameState): void {
 
 export function rematch(s: GameState): GameState {
   if (s.phase !== 'finished') throw new RuleError('Het seizoen is nog niet voorbij');
+  return backToLobby(s);
+}
+
+/** Breek het lopende seizoen af: iedereen blijft, het spel staat weer in de lobby. */
+export function stopGame(s: GameState): GameState {
+  if (s.phase === 'lobby') throw new RuleError('Er loopt geen spel');
+  return backToLobby(s);
+}
+
+function backToLobby(s: GameState): GameState {
   s.phase = 'lobby';
   s.briefing = null;
   s.kopman = {};

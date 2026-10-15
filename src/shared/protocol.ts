@@ -36,9 +36,14 @@ export type PresidentAction =
   | 'briefBack'
   | 'briefDone';
 
+/** Wat de tv (of de laptop waarop de tv draait) zelf mag doen, zonder telefoon. */
+export type TvControl = 'start' | 'stop' | 'rematch';
+
 export type ClientMsg =
   | { t: 'tv:create'; origin: string }
   | { t: 'tv:resume'; code: string; origin: string }
+  | { t: 'tv:control'; what: TvControl }
+  | { t: 'tv:kick'; teamId: string } // zet een speler uit het spel: weg in de lobby, een bot erna
   | { t: 'player:join'; code: string; name: string; token?: string }
   | { t: 'act'; action: PlayerAction }
   | { t: 'president'; what: PresidentAction }

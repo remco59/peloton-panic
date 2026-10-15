@@ -9,7 +9,7 @@ import { advanceDraft, autoPick, buy, draftPick, install, sabotage, train } from
 import { join, setKopman, start } from './lobby';
 import { afterResolve, resolveRound, setEfforts, startRace } from './race';
 import { botShopStep, endNaming, endRecruit, endSponsors, nameRiders, recruitBuy, startRecruit } from './recruit';
-import { afterResults, rematch } from './results';
+import { afterResults, rematch, stopGame } from './results';
 import { offer, respond } from './trade';
 
 // ---- Reducer -----------------------------------------------------------------
@@ -105,6 +105,20 @@ export function reduce(prev: GameState, action: Action): GameState {
       return timeout(s);
     case 'rematch':
       return rematch(s);
+    case 'stop':
+      return stopGame(s);
+    case 'kick': {
+      const team = teamOf(s, action.teamId);
+      if (s.phase === 'lobby') {
+        s.teams = s.teams.filter((t) => t.id !== team.id);
+        s.riders = s.riders.filter((r) => r.teamId !== team.id);
+        return s;
+      }
+      // Midden in het seizoen blijft het team bestaan (de stand verwijst ernaar): een bot speelt het uit.
+      if (team.isBot) throw new RuleError('Een bot zet je niet uit het spel');
+      team.isBot = true;
+      return s;
+    }
     case 'removeBot': {
       if (s.phase !== 'lobby') throw new RuleError('Bots verwijder je alleen in de lobby');
       const last = s.teams[s.teams.length - 1];

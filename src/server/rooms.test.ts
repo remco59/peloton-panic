@@ -111,6 +111,102 @@ describe('president actions', () => {
   });
 });
 
+describe('tv controls', () => {
+  it('starts the season from the tv once there are two teams', () => {
+    const room = createRoom('http://x');
+    const a = room.join(sock(), 'Anna');
+    expect(() => room.tvControl('start')).toThrow(RuleError);
+    room.president(a.teamId, 'addBot');
+    room.tvControl('start');
+    expect(room.state.phase).toBe('briefing');
+  });
+
+  it('stops a running game and returns everyone to the lobby, then starts a new one', () => {
+    vi.useFakeTimers();
+    try {
+      const room = createRoom('http://x');
+      const a = room.join(sock(), 'Anna');
+      room.president(a.teamId, 'addBot');
+      room.tvControl('start');
+      room.president(a.teamId, 'briefDone');
+      expect(room.state.phase).toBe('sponsors');
+
+      room.tvControl('stop');
+      expect(room.state.phase).toBe('lobby');
+      expect(room.state.teams).toHaveLength(2);
+      expect(room.state.riders).toHaveLength(0);
+      expect(room.phaseEndsAt).toBeNull();
+      expect(room.autopilot.size).toBe(0);
+
+      // Geen verlopen timer van het afgebroken spel mag de lobby nog verstoren.
+      vi.advanceTimersByTime(TIMING.sponsorsMs + 5_000);
+      expect(room.state.phase).toBe('lobby');
+
+      room.tvControl('start');
+      expect(room.state.phase).toBe('briefing');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('refuses to stop when no game is running', () => {
+    const room = createRoom('http://x');
+    room.join(sock(), 'Anna');
+    expect(() => room.tvControl('stop')).toThrow(RuleError);
+  });
+});
+
+describe('kicking players from the tv', () => {
+  it('removes a team in the lobby, tells the phone, and reuses the freed team id', () => {
+    const room = createRoom('http://x');
+    const wa = sock();
+    const a = room.join(wa, 'Anna');
+    const wb = sock();
+    const b = room.join(wb, 'Ben');
+    room.join(sock(), 'Carl');
+    expect(room.presidentTeamId).toBe(a.teamId);
+
+    room.kick(a.teamId);
+    expect(room.state.teams.map((t) => t.name)).toEqual(['Ben', 'Carl']);
+    expect(room.presidentTeamId).toBe(b.teamId); // de kroon gaat naar een ander
+    expect(wa.sent.some((m) => m.t === 'error' && m.fatal)).toBe(true);
+    expect(room.hasSeat(a.teamId, wa)).toBe(false);
+
+    const d = room.join(sock(), 'Dirk');
+    const ids = room.state.teams.map((t) => t.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(room.state.teams.find((t) => t.name === 'Dirk')?.id).toBe(d.teamId);
+  });
+
+  it('lets a bot take over a kicked team mid-season, and refuses to kick a bot then', () => {
+    const room = createRoom('http://x');
+    const a = room.join(sock(), 'Anna');
+    const b = room.join(sock(), 'Ben');
+    room.president(a.teamId, 'addBot');
+    room.tvControl('start');
+    room.president(a.teamId, 'briefDone');
+    expect(room.state.phase).toBe('sponsors');
+
+    room.kick(b.teamId);
+    expect(room.state.teams.find((t) => t.id === b.teamId)?.isBot).toBe(true);
+    expect(() => room.kick(b.teamId)).toThrow(RuleError);
+
+    // De bot speelt mee: na genoeg tijd is Ben's team klaar met winkelen.
+    for (let i = 0; i < 60 && !room.state.ready[b.teamId]; i++) vi.advanceTimersByTime(1_000);
+    expect(room.state.ready[b.teamId]).toBe(true);
+  });
+
+  it('ignores actions from a connection whose seat was taken away', () => {
+    const room = createRoom('http://x');
+    const wa = sock();
+    const a = room.join(wa, 'Anna');
+    room.join(sock(), 'Ben');
+    expect(room.hasSeat(a.teamId, wa)).toBe(true);
+    room.kick(a.teamId);
+    expect(room.hasSeat(a.teamId, wa)).toBe(false);
+  });
+});
+
 /** Beide winkelstappen, sponsors en dan renners, laten aflopen. */
 const SHOP_MS = TIMING.sponsorsMs + TIMING.recruitMs + 2;
 

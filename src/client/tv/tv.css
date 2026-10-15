@@ -13,6 +13,8 @@
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 16px;
+  position: relative;
+  z-index: 2; /* boven de overlays, zodat stop en geluid altijd bereikbaar blijven */
 }
 .logo {
   color: var(--ink);
@@ -48,6 +50,76 @@
 .mute:hover {
   color: var(--ink);
   border-color: var(--ink);
+}
+
+.stop:hover,
+.stop.yes {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+.stop-confirm {
+  margin-left: 1em;
+  font-size: 0.55em;
+  color: var(--bad);
+}
+.stop-confirm .mute {
+  margin-left: 0.6em;
+  font-size: 1em;
+}
+
+.roster {
+  position: relative;
+  display: inline-block;
+}
+.roster-pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  z-index: 10;
+  min-width: 280px;
+  padding: 12px 14px;
+  font-family: var(--body, inherit);
+  font-size: 16px;
+  text-align: left;
+  letter-spacing: 0;
+  background: var(--panel, #161a2e);
+}
+.roster-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+.roster-row .rn {
+  flex: 1;
+  color: var(--ink);
+}
+.roster-row .mute {
+  margin-left: 0;
+  font-size: 13px;
+}
+.roster-pop .s {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+
+.big-start {
+  display: block;
+  margin: 20px 0 0;
+  padding: 14px 28px;
+  font-family: var(--display);
+  font-size: clamp(20px, 1.8vw, 30px);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--on-accent);
+  background: var(--accent);
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.big-start:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .main {

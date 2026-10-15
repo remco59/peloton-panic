@@ -446,4 +446,6 @@ export type Action =
   | { type: 'timeout' }
   | { type: 'nextStage' }
   | { type: 'rematch' }
+  | { type: 'stop' }
+  | { type: 'kick'; teamId: string }
   | { type: 'removeBot' };
