@@ -1,6 +1,6 @@
 # Peloton Panic
 
-Een bankhangspel voor 2 tot 6 spelers. De tv is het speelbord, jullie telefoons zijn je hand.
+Een bankhangspel voor 2 tot 8 spelers. De tv is het speelbord, jullie telefoons zijn je hand.
 Je managet een ploeg van drie renners door een seizoen van drie etappes: eerst je renners
 rekruteren, dan kaarten kiezen, renners trainen, spullen en staf inkopen, en een race waarin jouw
 voorbereiding, het weer en de groep waarin je rijdt het verschil maken. Wie laatste eindigt, krijgt

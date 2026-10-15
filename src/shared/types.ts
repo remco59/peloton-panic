@@ -1,7 +1,8 @@
 // Gedeelde types voor Peloton Panic: server, TV en telefoon gebruiken dezelfde.
 
 export const MIN_TEAMS = 2;
-export const MAX_TEAMS = 6;
+export const MAX_TEAMS = 8;
+export const DECK_BASE_TEAMS = 6; // zoveel teams kan de basisstapel kaarten aan
 export const RIDERS_PER_TEAM = 3;
 export const TRACK_LENGTH = 48;
 export const STAT_FACTOR = 1; // hoeveel een eigenschapspunt aan beweging oplevert

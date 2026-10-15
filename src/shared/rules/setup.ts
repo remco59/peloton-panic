@@ -2,7 +2,7 @@
 
 import { CARD_DEF_LIST, COURSES, stageInfo } from '../content';
 import { pick, randInt, shuffle } from '../rng';
-import { MARKET_SIZE, STAGES, TRACK_LENGTH } from '../types';
+import { DECK_BASE_TEAMS, MARKET_SIZE, STAGES, TRACK_LENGTH } from '../types';
 import type { Card, GameState, Premie, Rider, Terrain } from '../types';
 import { effectiveStats } from './calc';
 
@@ -112,7 +112,9 @@ export function newCard(s: GameState, def: string): Card {
 
 export function buildDeck(s: GameState): Card[] {
   const cards: Card[] = [];
-  for (const d of CARD_DEF_LIST) for (let i = 0; i < d.count; i++) cards.push(newCard(s, d.id));
+  // Het basisspel is afgestemd op zes teams; met meer teams groeit de stapel mee, anders raakt hij leeg.
+  const scale = Math.max(1, s.teams.length / DECK_BASE_TEAMS);
+  for (const d of CARD_DEF_LIST) for (let i = 0; i < Math.ceil(d.count * scale); i++) cards.push(newCard(s, d.id));
   return shuffle(s, cards);
 }
 

@@ -1,5 +1,5 @@
 // Speelt een heel seizoen tegen de draaiende dev-server: één simulatiespeler (de "speler"),
-// drie bots, en maakt met headless Chrome screenshots van de tv en een telefoon.
+// drie bots (PP_BOTS past dat aan), en maakt met headless Chrome screenshots van de tv en een telefoon.
 //
 //   npm run dev          (terminal 1)
 //   npm run screenshots  (terminal 2)  ->  docs/screenshots/*.png
@@ -16,6 +16,7 @@ const BASE = process.env.PP_URL ?? 'http://localhost:3000';
 const WS = BASE.replace(/^http/, 'ws') + '/ws';
 const CHROME = process.env.CHROME || undefined; // leeg: Playwrights eigen Chromium
 const OUT = process.env.PP_OUT ?? join(process.cwd(), 'docs', 'screenshots');
+const BOTS = Number(process.env.PP_BOTS ?? 3); // aantal bots naast de simulatiespeler
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 let browser: Browser | null = null;
@@ -105,11 +106,11 @@ async function main() {
   me.send({ t: 'player:join', code, name: 'Remco' });
   await until(() => !!me.token, 10000, 'meedoen');
   me.send({ t: 'president', what: 'tutorialOn' });
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < BOTS; i++) {
     me.send({ t: 'president', what: 'addBot' });
     await sleep(150);
   }
-  await until(() => (tv.state?.teams.length ?? 0) === 4, 10000, '4 teams');
+  await until(() => (tv.state?.teams.length ?? 0) === BOTS + 1, 10000, `${BOTS + 1} teams`);
 
   const tvUrl = `${BASE}/?room=${code}`;
   const phoneUrl = (extra = '') =>

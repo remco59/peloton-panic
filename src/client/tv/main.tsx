@@ -24,7 +24,7 @@ import { standing, tiles } from '../../shared/standing';
 import { tvHint } from '../../shared/tutorial';
 import type { FeedBatch, RoomInfo, ServerMsg } from '../../shared/protocol';
 import type { PublicState, PublicTeam, Rider, Stat } from '../../shared/types';
-import { PREMIE_POINTS, STAGES } from '../../shared/types';
+import { MAX_TEAMS, PREMIE_POINTS, STAGES } from '../../shared/types';
 import { sound } from '../common/sound';
 import { useBump, useChanged, useFlip } from '../common/motion';
 import { openSocket } from '../common/ws';
@@ -384,7 +384,7 @@ function Ladder({ snap }: { snap: Snapshot }) {
   // The rider who just took the yellow jersey gets a sweep across the row.
   const took = useChanged(rows[0]?.rider.id ?? null);
   return (
-    <div ref={ref} class={`standings ladder frame ${rows.length > 9 ? 'dense' : ''}`} style={{ '--n': rows.length }}>
+    <div ref={ref} class={`standings ladder frame ${rows.length > 9 ? 'dense' : ''} ${rows.length > 18 ? 'packed' : ''}`} style={{ '--n': rows.length }}>
       <div class="tag ty">
         Koers · {rows.length} renners · tegel {lead} van {state.trackLength}
       </div>
@@ -605,7 +605,7 @@ function NamingPanel({ snap }: { snap: Snapshot }) {
         </div>
       </div>
       <TutorialCard state={state} variant="inline" />
-      <div class="boards">
+      <div class={`boards ${state.teams.length > 6 ? 'crowded' : ''}`}>
         {state.teams.map((t) => {
           const col = colorOf(t);
           const ready = t.ready || t.isBot;
@@ -648,7 +648,7 @@ function RecruitPanel({ snap }: { snap: Snapshot }) {
         </div>
       </div>
       <TutorialCard state={state} variant="inline" />
-      <div class="boards">
+      <div class={`boards ${state.teams.length > 6 ? 'crowded' : ''}`}>
         {state.teams.map((t) => {
           const col = colorOf(t);
           const riders = ridersOf(state, t.id);
@@ -667,7 +667,7 @@ function RecruitPanel({ snap }: { snap: Snapshot }) {
                 const r = riders[i];
                 return r ? (
                   <div class="br" key={r.id}>
-                    <RiderAvatar rider={r} color={t.color} size={46} />
+                    <RiderAvatar rider={r} color={t.color} size={state.teams.length > 6 ? 34 : 46} />
                     <div class="brb">
                       <div class="rn">
                         {r.name} <TypeBadge type={r.type} />
@@ -776,7 +776,7 @@ function TeamPanel({ snap }: { snap: Snapshot }) {
         </div>
       </div>
       <TutorialCard state={state} variant="inline" />
-      <div class="boards">
+      <div class={`boards ${state.teams.length > 6 ? 'crowded' : ''}`}>
         {state.teams.map((t) => {
           const col = colorOf(t);
           const tol = toleranceOf(t);
@@ -794,7 +794,7 @@ function TeamPanel({ snap }: { snap: Snapshot }) {
               </div>
               {ridersOf(state, t.id).map((r) => (
                 <div class="br" key={r.id}>
-                  <RiderAvatar rider={r} color={t.color} size={46} />
+                  <RiderAvatar rider={r} color={t.color} size={state.teams.length > 6 ? 34 : 46} />
                   <div class="brb">
                     <div class="rn">
                       {r.name} <TypeBadge type={r.type} />
@@ -840,7 +840,7 @@ function Lobby({ snap }: { snap: Snapshot }) {
           <div class="url">{snap.joinUrl.replace(/^https?:\/\//, '')}</div>
         </div>
         <div class="right">
-          <div class="ty kicker">HET PELOTON ({state.teams.length}/6)</div>
+          <div class="ty kicker">HET PELOTON ({state.teams.length}/{MAX_TEAMS})</div>
           <div class="teams">
             {state.teams.length === 0 && <p class="dim">Wachten op de eerste renner...</p>}
             {state.teams.map((t) => {
@@ -959,10 +959,10 @@ function Results({ snap }: { snap: Snapshot }) {
   });
   return (
     <div class="overlay">
-      <div class="finish frame">
+      <div class={`finish frame ${state.teams.length > 6 ? 'crowded' : ''}`}>
         <div class="ty kicker">UITSLAG ETAPPE {res.stage}</div>
         <Podium entries={entries} />
-        <div class="podium details">
+        <div class={`podium details ${state.teams.length > 6 ? 'crowded' : ''}`}>
           {teams.map((t, i) => {
             const team = teamById(state, t.teamId);
             const col = colorOf(team);

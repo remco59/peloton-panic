@@ -55,7 +55,7 @@ export const TIMING = {
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // geen I of O
 const FEED_KEEP = 10;
-const BOT_NAMES = ['Bot Bram', 'Bot Sanne', 'Bot Joris', 'Bot Fleur', 'Bot Daan', 'Bot Lotte'];
+const BOT_NAMES = ['Bot Bram', 'Bot Sanne', 'Bot Joris', 'Bot Fleur', 'Bot Daan', 'Bot Lotte', 'Bot Milan', 'Bot Eva'];
 
 interface Seat {
   token: string;
