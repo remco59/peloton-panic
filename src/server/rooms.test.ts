@@ -1,8 +1,11 @@
+import { mkdtempSync, existsSync, readdirSync, rmSync, writeFileSync, utimesSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket } from 'ws';
 import { RuleError } from '../shared/engine';
 import type { ServerMsg } from '../shared/protocol';
-import { createRoom, getRoom, sweepRooms, TIMING } from './rooms';
+import { createRoom, enablePersistence, flushRooms, getRoom, resetRooms, Room, sweepRooms, TIMING } from './rooms';
 
 // Geen echte stemmen of netwerk in de tests.
 vi.mock('./tts', () => ({ warm: () => {}, speak: async () => Buffer.alloc(0) }));
@@ -24,6 +27,7 @@ beforeEach(() => {
   vi.spyOn(Math, 'random').mockReturnValue(0.5);
 });
 afterEach(() => {
+  resetRooms();
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
@@ -142,18 +146,239 @@ describe('phase timers and bots', () => {
     expect(bot.riderIds.length).toBeGreaterThan(0);
   });
 
-  it('waits in naming for the human (no timer), then runs on to the race by itself', () => {
+  it('waits in naming for the human, but moves on after the naming timer', () => {
     const { room, a } = startedRoom();
     room.president(a.teamId, 'briefDone');
     vi.advanceTimersByTime(TIMING.recruitMs + 1);
     expect(room.state.phase).toBe('naming');
-    expect(room.phaseEndsAt).toBeNull();
-    vi.advanceTimersByTime(10 * 60_000);
-    expect(room.state.phase).toBe('naming'); // see issue #7: an idle human stalls the game
+    expect(room.phaseEndsAt).toBeGreaterThan(Date.now());
+    vi.advanceTimersByTime(TIMING.namingMs - 5_000);
+    expect(room.state.phase).toBe('naming');
+    vi.advanceTimersByTime(6_000);
+    expect(room.state.phase).toBe('draft');
+  });
 
+  it('runs on from naming to the race by itself once the human is ready', () => {
+    const { room, a } = startedRoom();
+    room.president(a.teamId, 'briefDone');
+    vi.advanceTimersByTime(TIMING.recruitMs + 1);
+    expect(room.state.phase).toBe('naming');
     room.playerAct(a.teamId, { type: 'ready' });
     // draft -> team -> race, each ending on its own timer
     for (let i = 0; i < 40 && room.state.phase !== 'race'; i++) vi.advanceTimersByTime(30_000);
     expect(room.state.phase).toBe('race');
+  });
+});
+
+describe('automatic pilot', () => {
+  function raceRoom() {
+    const room = createRoom('http://x');
+    const ws = sock();
+    const a = room.join(ws, 'Anna');
+    const bws = sock();
+    const b = room.join(bws, 'Ben');
+    room.president(a.teamId, 'start');
+    room.president(a.teamId, 'briefDone');
+    return { room, a, b, ws, bws };
+  }
+
+  it('puts a disconnected team on autopilot after the grace period and plays for it', () => {
+    const { room, a, b, bws } = raceRoom();
+    room.detach(bws);
+    vi.advanceTimersByTime(TIMING.awayGraceMs - 1_000);
+    expect(room.autopilot.has(b.teamId)).toBe(false);
+    vi.advanceTimersByTime(2_000);
+    expect(room.autopilot.has(b.teamId)).toBe(true);
+    expect(room.autopilot.has(a.teamId)).toBe(false);
+
+    // Anna ready up in naming: Ben must not hold the game up.
+    vi.advanceTimersByTime(TIMING.recruitMs + 1);
+    expect(room.state.phase).toBe('naming');
+    room.playerAct(a.teamId, { type: 'ready' });
+    vi.advanceTimersByTime(10_000);
+    expect(room.state.phase).toBe('draft');
+    const benRiders = room.state.riders.filter((r) => r.teamId === b.teamId);
+    expect(benRiders.length).toBe(3);
+  });
+
+  it('keeps an away player in the lobby without autopilot', () => {
+    const room = createRoom('http://x');
+    const ws = sock();
+    const a = room.join(ws, 'Anna');
+    room.detach(ws);
+    vi.advanceTimersByTime(TIMING.awayGraceMs + 1_000);
+    expect(room.autopilot.has(a.teamId)).toBe(false);
+  });
+
+  it('hands control back when the player returns with their token', () => {
+    const { room, b, bws } = raceRoom();
+    room.detach(bws);
+    vi.advanceTimersByTime(TIMING.awayGraceMs + 1_000);
+    expect(room.autopilot.has(b.teamId)).toBe(true);
+    const back = sock();
+    room.join(back, 'Ben', b.token);
+    expect(room.autopilot.has(b.teamId)).toBe(false);
+    const msg = back.last;
+    if (msg?.t !== 'player:state') throw new Error('expected player:state');
+    expect(msg.autopilot[b.teamId]).toBeUndefined();
+  });
+
+  it('a bot stops acting for a team the moment its player takes over', () => {
+    const { room, b, bws } = raceRoom();
+    room.detach(bws);
+    vi.advanceTimersByTime(TIMING.awayGraceMs + 1_000);
+    room.takeover(b.teamId);
+    expect(room.autopilot.has(b.teamId)).toBe(false);
+    const before = room.state.teams.find((t) => t.id === b.teamId)!.riderIds.length;
+    vi.advanceTimersByTime(20_000); // pending bot steps fire and see they are no longer in charge
+    expect(room.state.teams.find((t) => t.id === b.teamId)!.riderIds.length).toBe(before);
+  });
+
+  it('hands the presidency to a connected player when the president goes away mid-briefing', () => {
+    const room = createRoom('http://x');
+    const ws = sock();
+    const a = room.join(ws, 'Anna');
+    const b = room.join(sock(), 'Ben');
+    room.president(a.teamId, 'start');
+    expect(room.state.phase).toBe('briefing');
+    room.detach(ws);
+    expect(() => room.president(b.teamId, 'briefDone')).toThrow('Alleen de president');
+    vi.advanceTimersByTime(TIMING.awayGraceMs + 1_000);
+    expect(room.presidentTeamId).toBe(b.teamId);
+    room.president(b.teamId, 'briefDone');
+    expect(room.state.phase).toBe('recruit');
+  });
+
+  it('flags a team that does nothing for two phase timers, but not one that acts', () => {
+    const room = createRoom('http://x');
+    const a = room.join(sock(), 'Anna');
+    const b = room.join(sock(), 'Ben');
+    room.president(a.teamId, 'start');
+    room.president(a.teamId, 'briefDone');
+    // Recruit timer: Anna shops, Ben does nothing at all.
+    const shop = room.state.recruit!.shops[a.teamId];
+    room.playerAct(a.teamId, { type: 'recruit', itemId: shop.find((x) => x.kind === 'rider')!.id });
+    vi.advanceTimersByTime(TIMING.recruitMs + 1);
+    expect(room.autopilot.has(b.teamId)).toBe(false); // one miss is not enough
+    room.playerAct(a.teamId, { type: 'ready' });
+    // Naming timer: nobody acts for Ben again -> second miss.
+    vi.advanceTimersByTime(TIMING.namingMs + 1);
+    expect(room.autopilot.has(b.teamId)).toBe(true);
+    expect(room.autopilot.has(a.teamId)).toBe(false);
+  });
+
+  it('any action from the player clears autopilot, even while connected', () => {
+    const room = createRoom('http://x');
+    const a = room.join(sock(), 'Anna');
+    const b = room.join(sock(), 'Ben');
+    room.president(a.teamId, 'start');
+    room.president(a.teamId, 'briefDone');
+    vi.advanceTimersByTime(TIMING.recruitMs + 1);
+    vi.advanceTimersByTime(TIMING.namingMs + 1);
+    expect(room.autopilot.has(b.teamId)).toBe(true);
+    room.playerAct(b.teamId, { type: 'unready' });
+    expect(room.autopilot.has(b.teamId)).toBe(false);
+  });
+});
+
+describe('persistence', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'peloton-rooms-'));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it('does not write anything until persistence is enabled', () => {
+    const room = createRoom('http://x');
+    room.join(sock(), 'Anna');
+    vi.advanceTimersByTime(2_000);
+    expect(readdirSync(dir)).toEqual([]);
+  });
+
+  it('saves a room after changes and restores it with the same state and tokens', () => {
+    enablePersistence(dir);
+    const room = createRoom('http://x');
+    const a = room.join(sock(), 'Anna');
+    room.president(a.teamId, 'addBot');
+    room.president(a.teamId, 'start');
+    room.president(a.teamId, 'briefDone');
+    vi.advanceTimersByTime(1_000);
+    expect(existsSync(join(dir, `${room.code}.json`))).toBe(true);
+    const before = JSON.parse(JSON.stringify(room.state));
+    const code = room.code;
+
+    // "Restart": forget everything in memory and load from disk.
+    resetRooms();
+    expect(getRoom(code)).toBeUndefined();
+    expect(enablePersistence(dir)).toBe(1);
+    const again = getRoom(code)!;
+    expect(again.state.phase).toBe('recruit');
+    expect(again.state.teams.map((t) => t.name)).toEqual(before.teams.map((t: { name: string }) => t.name));
+    expect(again.presidentTeamId).toBe(a.teamId);
+
+    // The phone reconnects with the old token and gets the same seat.
+    const phone = sock();
+    expect(again.join(phone, 'Anna', a.token).teamId).toBe(a.teamId);
+    expect(phone.last?.t).toBe('player:state');
+  });
+
+  it('re-arms the phase timer with the remaining time and stays quiet', () => {
+    enablePersistence(dir);
+    const room = createRoom('http://x');
+    const a = room.join(sock(), 'Anna');
+    room.president(a.teamId, 'addBot');
+    room.president(a.teamId, 'start');
+    room.president(a.teamId, 'briefDone');
+    vi.advanceTimersByTime(40_000);
+    flushRooms();
+    const code = room.code;
+    const endsAt = room.phaseEndsAt!;
+
+    resetRooms();
+    enablePersistence(dir);
+    const again = getRoom(code)!;
+    expect(again.feed).toEqual([]); // no commentary replayed on restore
+    expect(again.phaseEndsAt).toBeLessThanOrEqual(endsAt + 1_000);
+    expect(again.state.phase).toBe('recruit');
+    vi.advanceTimersByTime(TIMING.recruitMs - 40_000 + 1_000);
+    expect(again.state.phase).not.toBe('recruit');
+  });
+
+  it('puts a restored team on autopilot if its phone never reconnects', () => {
+    enablePersistence(dir);
+    const room = createRoom('http://x');
+    const a = room.join(sock(), 'Anna');
+    room.president(a.teamId, 'addBot');
+    room.president(a.teamId, 'start');
+    room.president(a.teamId, 'briefDone');
+    flushRooms();
+    const code = room.code;
+    resetRooms();
+    enablePersistence(dir);
+    const again = getRoom(code)!;
+    expect(again.autopilot.has(a.teamId)).toBe(false);
+    vi.advanceTimersByTime(TIMING.awayGraceMs + 1_000);
+    expect(again.autopilot.has(a.teamId)).toBe(true);
+  });
+
+  it('skips corrupt and stale files and removes files of swept rooms', () => {
+    enablePersistence(dir);
+    const room = createRoom('http://x');
+    room.join(sock(), 'Anna');
+    flushRooms();
+    const code = room.code;
+    writeFileSync(join(dir, 'KAPOT.json'), '{ not json');
+    writeFileSync(join(dir, 'OUD.json'), JSON.stringify({ v: 1, code: 'OUDD', lastActive: 0 }));
+    utimesSync(join(dir, 'OUD.json'), new Date(0), new Date(0));
+
+    resetRooms();
+    expect(enablePersistence(dir)).toBe(1); // only the valid, recent room
+    expect(existsSync(join(dir, 'OUD.json'))).toBe(false); // stale file cleaned up
+    expect(getRoom(code)).toBeInstanceOf(Room);
+
+    getRoom(code)!.lastActive = Date.now() - 10_000;
+    sweepRooms(1_000);
+    expect(getRoom(code)).toBeUndefined();
+    expect(existsSync(join(dir, `${code}.json`))).toBe(false);
   });
 });

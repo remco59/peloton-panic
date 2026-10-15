@@ -6,7 +6,7 @@ import { WebSocketServer } from 'ws';
 import type { WebSocket } from 'ws';
 import { RuleError } from '../shared/engine';
 import type { ClientMsg } from '../shared/protocol';
-import { createRoom, getRoom, send, sweepRooms } from './rooms';
+import { createRoom, enablePersistence, flushRooms, getRoom, send, sweepRooms } from './rooms';
 import type { Room } from './rooms';
 import { isSpeaker, speak, ttsAvailable } from './tts';
 
@@ -149,6 +149,11 @@ function handle(ws: WebSocket, conn: Conn, msg: ClientMsg): void {
       conn.room.playerAct(conn.teamId, msg.action);
       return;
     }
+    case 'takeover': {
+      if (conn.role !== 'player' || !conn.room || !conn.teamId) return;
+      conn.room.takeover(conn.teamId);
+      return;
+    }
     case 'president': {
       if (conn.role !== 'player' || !conn.room || !conn.teamId) return;
       conn.room.president(conn.teamId, msg.what);
@@ -159,10 +164,20 @@ function handle(ws: WebSocket, conn: Conn, msg: ClientMsg): void {
 
 setInterval(() => sweepRooms(), 10 * 60 * 1000).unref();
 
+// Kamers overleven een herstart: ze staan als JSON in .cache/rooms (of ROOMS_DIR).
+const restored = enablePersistence(process.env.ROOMS_DIR ?? join(ROOT, '.cache', 'rooms'));
+for (const sig of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(sig, () => {
+    flushRooms();
+    process.exit(0);
+  });
+}
+
 server.listen(PORT, '0.0.0.0', () => {
   const lan = lanAddress();
   console.log('\n  Peloton Panic is running');
   console.log(`  TV:      http://localhost:${PORT}/`);
   if (lan) console.log(`  Phones:  http://${lan}:${PORT}/play   (same Wi-Fi as this computer)`);
+  if (restored > 0) console.log(`  Rooms:   ${restored} restored from the last run`);
   console.log(`  Voices:  ${ttsAvailable() ? 'edge-tts ready' : 'edge-tts missing, run: npm run setup:tts'}\n`);
 });

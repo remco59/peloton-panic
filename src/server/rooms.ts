@@ -2,6 +2,8 @@
 // sockets, fasetimers, bots en de commentaarfeed.
 
 import { randomInt, randomUUID } from 'node:crypto';
+import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { WebSocket } from 'ws';
 import {
   contractLines,
@@ -38,12 +40,15 @@ import { warm } from './tts';
 
 export const TIMING = {
   recruitMs: 90_000, // iedereen winkelt tegelijk in zijn eigen winkel
+  namingMs: 120_000, // renners een naam geven; daarna houdt wie niets deed de willekeurige namen
   draftMs: 20_000,
   teamMs: 90_000,
   raceMs: 30_000, // naast het tempo kies je ook volgauto en kaarten
   resolveMs: 7_000,
   resultsMs: 35_000,
   tutorialFactor: 1.6, // meer tijd als de commentatoren uitleg geven
+  awayGraceMs: 30_000, // zo lang mag een telefoon weg zijn voordat een bot overneemt
+  idleMisses: 2, // zo vaak achter elkaar een timer missen voordat een bot overneemt
 };
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // geen I of O
@@ -53,6 +58,21 @@ const BOT_NAMES = ['Bot Bram', 'Bot Sanne', 'Bot Joris', 'Bot Fleur', 'Bot Daan'
 interface Seat {
   token: string;
   sockets: Set<WebSocket>; // een stoel kan op meer dan één apparaat open staan
+}
+
+/** Alles wat nodig is om een kamer na een herstart van de server weer op te pakken. */
+export interface RoomSnapshot {
+  v: 1;
+  code: string;
+  joinBase: string;
+  state: GameState;
+  seats: Record<string, string>; // team-id -> token
+  presidentTeamId: string | null;
+  phaseEndsAt: number | null;
+  autopilot: string[];
+  missed: Record<string, number>;
+  explained: TutorialTopic[];
+  lastActive: number;
 }
 
 export class Room {
@@ -67,6 +87,15 @@ export class Room {
   private timer: NodeJS.Timeout | null = null;
   private botTimers: NodeJS.Timeout[] = [];
   private explained = new Set<TutorialTopic>();
+  /** Teams waar een bot voor speelt omdat de speler weg of afwezig is. */
+  autopilot = new Set<string>();
+  private missed = new Map<string, number>();
+  private acted = new Set<string>(); // teams die sinds de vorige fasetimer iets hebben gedaan
+  private awayTimers = new Map<string, NodeJS.Timeout>();
+  /** Wordt na elke wijziging aangeroepen, zodat de kamer bewaard kan worden. */
+  onChange: ((room: Room) => void) | null = null;
+  private quiet = false; // tijdens herstel: geen commentaar
+  private resumeMs: number | null = null; // tijdens herstel: de resterende tijd van de fase
 
   constructor(
     readonly code: string,
@@ -83,6 +112,7 @@ export class Room {
       joinUrl: `${this.joinBase}/play?room=${this.code}`,
       presidentTeamId: this.presidentTeamId,
       connected,
+      autopilot: Object.fromEntries([...this.autopilot].map((id) => [id, true])),
       phaseEndsAt: this.phaseEndsAt,
       serverNow: Date.now(),
     };
@@ -96,9 +126,50 @@ export class Room {
       const msg: ServerMsg = { t: 'player:state', state, me: toPlayerView(this.state, teamId), teamId, ...info };
       for (const ws of seat.sockets) send(ws, msg);
     }
+    this.onChange?.(this);
+  }
+
+  snapshot(): RoomSnapshot {
+    return {
+      v: 1,
+      code: this.code,
+      joinBase: this.joinBase,
+      state: this.state,
+      seats: Object.fromEntries([...this.seats].map(([teamId, seat]) => [teamId, seat.token])),
+      presidentTeamId: this.presidentTeamId,
+      phaseEndsAt: this.phaseEndsAt,
+      autopilot: [...this.autopilot],
+      missed: Object.fromEntries(this.missed),
+      explained: [...this.explained],
+      lastActive: this.lastActive,
+    };
+  }
+
+  /** Zet een bewaarde kamer weer in gang: timers en bots lopen door, commentaar blijft stil. */
+  static restore(snap: RoomSnapshot): Room {
+    const room = new Room(snap.code, snap.joinBase);
+    room.state = snap.state;
+    for (const [teamId, token] of Object.entries(snap.seats)) room.seats.set(teamId, { token, sockets: new Set() });
+    room.presidentTeamId = snap.presidentTeamId;
+    room.autopilot = new Set(snap.autopilot);
+    room.missed = new Map(Object.entries(snap.missed));
+    room.explained = new Set(snap.explained);
+    room.lastActive = snap.lastActive;
+    room.quiet = true;
+    room.resumeMs = snap.phaseEndsAt ? Math.max(3_000, snap.phaseEndsAt - Date.now()) : null;
+    try {
+      room.onEnter(room.state);
+    } finally {
+      room.quiet = false;
+      room.resumeMs = null;
+    }
+    // Telefoons moeten zich opnieuw melden; wie dat niet doet, krijgt na de gratietijd een bot.
+    for (const teamId of room.seats.keys()) room.watchAway(teamId);
+    return room;
   }
 
   private say(all: Line[], interrupt = false): void {
+    if (this.quiet) return;
     // Met commentaar uit blijft alleen Fenna (de tutorial-uitleg) over.
     const lines = this.state.commentary ? all : all.filter((l) => l.speaker === 'fenna');
     if (lines.length === 0) return;
@@ -109,7 +180,7 @@ export class Room {
 
   /** Uitleg, alleen bij tutorial en slechts één keer per onderwerp. */
   private explain(topic: TutorialTopic): Line[] {
-    if (!this.state.tutorial || this.explained.has(topic)) return [];
+    if (this.quiet || !this.state.tutorial || this.explained.has(topic)) return [];
     this.explained.add(topic);
     return tutorialLines(topic, toPublic(this.state));
   }
@@ -127,8 +198,103 @@ export class Room {
 
   detach(ws: WebSocket): void {
     this.tvs.delete(ws);
-    for (const seat of this.seats.values()) seat.sockets.delete(ws);
+    for (const [teamId, seat] of this.seats) {
+      if (seat.sockets.delete(ws) && seat.sockets.size === 0) this.watchAway(teamId);
+    }
     this.broadcast();
+  }
+
+  // ---- Automatische piloot ----
+
+  private botLike(teamId: string): boolean {
+    return !!this.state.teams.find((t) => t.id === teamId)?.isBot || this.autopilot.has(teamId);
+  }
+
+  /** Start de gratietijd; is de telefoon daarna nog weg, dan neemt een bot over. */
+  private watchAway(teamId: string): void {
+    clearTimeout(this.awayTimers.get(teamId));
+    this.awayTimers.set(
+      teamId,
+      setTimeout(() => {
+        this.awayTimers.delete(teamId);
+        if ((this.seats.get(teamId)?.sockets.size ?? 0) === 0) this.goAuto(teamId);
+      }, TIMING.awayGraceMs),
+    );
+  }
+
+  private goAuto(teamId: string): void {
+    const team = this.state.teams.find((t) => t.id === teamId);
+    if (!team || team.isBot) return;
+    // Zonder aanwezige president kan niemand de uitleg doorbladeren of de volgende etappe starten.
+    if (this.presidentTeamId === teamId) this.passPresident();
+    const playing = this.state.phase !== 'lobby' && this.state.phase !== 'finished';
+    if (playing && !this.autopilot.has(teamId)) {
+      this.autopilot.add(teamId);
+      this.kickAuto(teamId);
+    }
+    this.broadcast();
+  }
+
+  private passPresident(): void {
+    const next = this.state.teams.find(
+      (t) => !t.isBot && t.id !== this.presidentTeamId && (this.seats.get(t.id)?.sockets.size ?? 0) > 0,
+    );
+    if (next) this.presidentTeamId = next.id;
+  }
+
+  /** De speler is terug (of doet iets): hij speelt weer zelf. */
+  private handBack(teamId: string): void {
+    clearTimeout(this.awayTimers.get(teamId));
+    this.awayTimers.delete(teamId);
+    this.missed.delete(teamId);
+    this.autopilot.delete(teamId);
+  }
+
+  takeover(teamId: string): void {
+    this.lastActive = Date.now();
+    this.handBack(teamId);
+    this.acted.add(teamId);
+    this.broadcast();
+  }
+
+  /** Een team dat zojuist op de piloot is gezet, doet meteen mee met wat er in deze fase te doen is. */
+  private kickAuto(teamId: string): void {
+    switch (this.state.phase) {
+      case 'recruit':
+        return this.scheduleBotRecruit([teamId]);
+      case 'naming':
+        return this.scheduleAutoNaming([teamId]);
+      case 'draft':
+        return this.scheduleBotDraft();
+      case 'team':
+        return this.scheduleBotTeams([teamId]);
+      case 'race':
+        return this.scheduleBotEfforts([teamId]);
+    }
+  }
+
+  /**
+   * Bij het aflopen van een fasetimer: een team dat sinds de vorige timer helemaal niets deed en nu
+   * ook niet klaar of vergrendeld is, krijgt een strafpunt. Twee achter elkaar is afwezig.
+   * Wie alleen de timer laat aflopen nadat hij wel iets deed, blijft zelf spelen.
+   */
+  private noteMisses(): void {
+    const s = this.state;
+    let waiting: string[] = [];
+    if (s.phase === 'race') waiting = s.teams.filter((t) => !s.locked[t.id]).map((t) => t.id);
+    else if (s.phase === 'team' || s.phase === 'recruit' || s.phase === 'naming') waiting = s.teams.filter((t) => !s.ready[t.id]).map((t) => t.id);
+    else if (s.phase === 'draft' && s.draft) waiting = [s.draft.order[s.draft.idx]];
+    for (const t of s.teams) {
+      if (this.botLike(t.id)) continue;
+      if (this.acted.has(t.id) || !waiting.includes(t.id)) {
+        this.missed.delete(t.id);
+        continue;
+      }
+      const n = (this.missed.get(t.id) ?? 0) + 1;
+      this.missed.set(t.id, n);
+      if (n >= TIMING.idleMisses) this.autopilot.add(t.id);
+    }
+    this.acted.clear();
   }
 
   join(ws: WebSocket, name: string, token?: string): { teamId: string; token: string } {
@@ -137,6 +303,7 @@ export class Room {
       for (const [teamId, seat] of this.seats) {
         if (seat.token === token) {
           seat.sockets.add(ws);
+          this.handBack(teamId);
           this.broadcast();
           return { teamId, token };
         }
@@ -156,6 +323,8 @@ export class Room {
 
   playerAct(teamId: string, a: PlayerAction): void {
     this.lastActive = Date.now();
+    this.handBack(teamId);
+    this.acted.add(teamId);
     this.dispatch({ ...a, teamId } as Action);
   }
 
@@ -254,9 +423,13 @@ export class Room {
     return t;
   }
 
-  private setPhaseTimer(ms: number, action: Action): void {
+  private setPhaseTimer(fullMs: number, action: Action): void {
+    const ms = this.resumeMs ?? fullMs;
     this.phaseEndsAt = Date.now() + ms;
-    this.timer = this.after(ms, () => this.dispatch(action));
+    this.timer = this.after(ms, () => {
+      if (action.type === 'timeout') this.noteMisses();
+      this.dispatch(action);
+    });
   }
 
   private onEnter(prev: GameState): void {
@@ -277,9 +450,9 @@ export class Room {
         break;
       }
       case 'naming': {
-        // Geen timer: iedereen geeft zijn renners een naam en drukt op klaar.
-        this.phaseEndsAt = null;
         this.say(namingLines(pub));
+        this.setPhaseTimer(this.scaled(TIMING.namingMs), { type: 'timeout' });
+        this.scheduleAutoNaming();
         break;
       }
       case 'draft': {
@@ -356,11 +529,11 @@ export class Room {
 
   // ---- Bots ----
 
-  private scheduleBotRecruit(): void {
+  private scheduleBotRecruit(only?: string[]): void {
     for (const t of this.state.teams) {
-      if (!t.isBot) continue;
+      if (!this.botLike(t.id) || (only && !only.includes(t.id))) continue;
       const step = () => {
-        if (this.state.phase !== 'recruit') return;
+        if (this.state.phase !== 'recruit' || !this.botLike(t.id)) return;
         const next = botShopStep(this.state, t.id, Math.random);
         if (!next) return;
         this.dispatch(next);
@@ -374,22 +547,23 @@ export class Room {
     const s = this.state;
     const teamId = s.draft ? s.draft.order[s.draft.idx] : null;
     const team = s.teams.find((t) => t.id === teamId);
-    if (!team?.isBot) return;
+    if (!team || !this.botLike(team.id)) return;
     this.after(
       1200 + Math.random() * 1800,
       () => {
         if (this.state.phase !== 'draft' || this.state.draft?.order[this.state.draft.idx] !== team.id) return;
+        if (!this.botLike(team.id)) return;
         this.dispatch({ type: 'draftPick', teamId: team.id, source: botDraft(this.state, team.id, Math.random) });
       },
       true,
     );
   }
 
-  private scheduleBotTeams(): void {
+  private scheduleBotTeams(only?: string[]): void {
     for (const t of this.state.teams) {
-      if (!t.isBot) continue;
+      if (!this.botLike(t.id) || (only && !only.includes(t.id))) continue;
       const step = () => {
-        if (this.state.phase !== 'team') return;
+        if (this.state.phase !== 'team' || !this.botLike(t.id)) return;
         const next = botStep(this.state, t.id, Math.random);
         if (next) {
           this.dispatch(next);
@@ -402,14 +576,29 @@ export class Room {
     }
   }
 
-  private scheduleBotEfforts(): void {
+  /** Een team op de piloot geeft zijn renners geen eigen naam, maar houdt de willekeurige en meldt zich klaar. */
+  private scheduleAutoNaming(only?: string[]): void {
+    for (const t of this.state.teams) {
+      if (t.isBot || !this.autopilot.has(t.id) || (only && !only.includes(t.id))) continue;
+      this.after(
+        1500 + Math.random() * 2500,
+        () => {
+          if (this.state.phase !== 'naming' || !this.autopilot.has(t.id) || this.state.ready[t.id]) return;
+          this.dispatch({ type: 'ready', teamId: t.id });
+        },
+        true,
+      );
+    }
+  }
+
+  private scheduleBotEfforts(only?: string[]): void {
     const round = this.state.round;
     for (const t of this.state.teams) {
-      if (!t.isBot) continue;
+      if (!this.botLike(t.id) || (only && !only.includes(t.id))) continue;
       this.after(
         2500 + Math.random() * 6000,
         () => {
-          if (this.state.phase !== 'race' || this.state.round !== round) return;
+          if (this.state.phase !== 'race' || this.state.round !== round || !this.botLike(t.id)) return;
           this.dispatch({ type: 'effort', teamId: t.id, ...botRacePlan(this.state, t.id, Math.random) });
         },
         true,
@@ -422,12 +611,88 @@ export class Room {
 
 const rooms = new Map<string, Room>();
 
+// ---- Bewaren -------------------------------------------------------------------
+// Uit totdat de server `enablePersistence` aanroept, zodat tests geen bestanden schrijven.
+
+let persistDir: string | null = null;
+const saveTimers = new Map<string, NodeJS.Timeout>();
+const SAVE_DEBOUNCE_MS = 400;
+
+function fileOf(code: string): string {
+  return join(persistDir!, `${code}.json`);
+}
+
+function writeRoom(room: Room): void {
+  if (!persistDir) return;
+  try {
+    const file = fileOf(room.code);
+    const tmp = `${file}.${process.pid}.tmp`;
+    writeFileSync(tmp, JSON.stringify(room.snapshot()));
+    renameSync(tmp, file); // atomair: een crash midden in het schrijven laat nooit een half bestand achter
+  } catch (e) {
+    console.warn('[rooms] bewaren mislukt:', (e as Error).message);
+  }
+}
+
+function saveSoon(room: Room): void {
+  if (saveTimers.has(room.code)) return;
+  saveTimers.set(
+    room.code,
+    setTimeout(() => {
+      saveTimers.delete(room.code);
+      writeRoom(room);
+    }, SAVE_DEBOUNCE_MS),
+  );
+}
+
+/** Schrijf alle kamers nu weg (bij afsluiten van de server). */
+export function flushRooms(): void {
+  for (const t of saveTimers.values()) clearTimeout(t);
+  saveTimers.clear();
+  for (const room of rooms.values()) writeRoom(room);
+}
+
+/** Bewaar kamers in `dir` en laad de kamers die daar al staan. Geeft het aantal herstelde kamers. */
+export function enablePersistence(dir: string, maxIdleMs = 3 * 60 * 60 * 1000): number {
+  mkdirSync(dir, { recursive: true });
+  persistDir = dir;
+  let restored = 0;
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith('.json')) continue;
+    const file = join(dir, name);
+    try {
+      const snap = JSON.parse(readFileSync(file, 'utf8')) as RoomSnapshot;
+      if (snap.v !== 1 || !snap.code || rooms.has(snap.code)) continue;
+      if (Date.now() - snap.lastActive > maxIdleMs) {
+        rmSync(file, { force: true });
+        continue;
+      }
+      const room = Room.restore(snap);
+      room.onChange = saveSoon;
+      rooms.set(room.code, room);
+      restored++;
+    } catch (e) {
+      console.warn(`[rooms] ${name} overgeslagen:`, (e as Error).message);
+    }
+  }
+  return restored;
+}
+
+/** Alleen voor tests: vergeet alle kamers en stop met bewaren. */
+export function resetRooms(): void {
+  for (const t of saveTimers.values()) clearTimeout(t);
+  saveTimers.clear();
+  rooms.clear();
+  persistDir = null;
+}
+
 export function createRoom(joinBase: string): Room {
   let code = '';
   do {
     code = Array.from({ length: 4 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join('');
   } while (rooms.has(code));
   const room = new Room(code, joinBase);
+  if (persistDir) room.onChange = saveSoon;
   rooms.set(code, room);
   return room;
 }
@@ -440,7 +705,12 @@ export function sweepRooms(maxIdleMs = 3 * 60 * 60 * 1000): void {
   const now = Date.now();
   for (const [code, room] of rooms) {
     const alive = room.tvs.size > 0 || [...room.seats.values()].some((s) => s.sockets.size > 0);
-    if (!alive && now - room.lastActive > maxIdleMs) rooms.delete(code);
+    if (!alive && now - room.lastActive > maxIdleMs) {
+      rooms.delete(code);
+      clearTimeout(saveTimers.get(code));
+      saveTimers.delete(code);
+      if (persistDir) rmSync(fileOf(code), { force: true });
+    }
   }
 }
 

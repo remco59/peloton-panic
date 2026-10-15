@@ -1265,11 +1265,13 @@ describe('namen geven', () => {
     return s;
   };
 
-  it('opent na het rekruteren, zonder timer-actie', () => {
+  it('opent na het rekruteren; draften kan pas daarna, en een time-out houdt de willekeurige namen', () => {
     const s = named();
     expect(s.phase).toBe('naming');
-    expect(reduce(s, { type: 'timeout' }).phase).toBe('naming');
     expect(() => reduce(s, { type: 'draftPick', teamId: s.teams[0].id, source: { kind: 'deck' } })).toThrow(RuleError);
+    const after = reduce(s, { type: 'timeout' });
+    expect(after.phase).toBe('draft');
+    expect(after.riders.map((r) => r.name)).toEqual(s.riders.map((r) => r.name));
   });
 
   it('past namen van de eigen renners aan en negeert lege namen', () => {

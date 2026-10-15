@@ -441,7 +441,11 @@ function Standings({ snap }: { snap: Snapshot }) {
               <div class="name">
                 {t.name}
                 {t.isBot && <span class="bot"> bot</span>}
-                {!snap.connected[t.id] && <span class="bad"> weg</span>}
+                {snap.autopilot[t.id] ? (
+                  <span class="bot"> bot speelt mee</span>
+                ) : (
+                  !snap.connected[t.id] && <span class="bad"> weg</span>
+                )}
               </div>
               <div class="riders">
                 <Coins n={t.coins} />

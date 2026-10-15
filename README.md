@@ -65,8 +65,20 @@ soorten:
 | Bonus | Regiobank (podium), Energiedrank XL (etappewinst en podium), Regionale Omroep (€ 1 per 3 punten) | Alleen als je presteert |
 | Leverancier | Gelfabriek (gels), Colafabriek (cola en gel), Autodealer (volgauto), Fietsenmaker (pech gedekt), Fysiopraktijk (herstel) | Elke etappe extra spullen en staf, gratis |
 
-Daarna geeft iedereen zijn renners een naam (of houdt de willekeurige namen). Daar zit geen timer
-op: de draft begint zodra iedereen op **Klaar** drukt. Bots zijn meteen klaar.
+Daarna geeft iedereen zijn renners een naam (of houdt de willekeurige namen). De draft begint zodra
+iedereen op **Klaar** drukt, of na twee minuten (wie niets deed, houdt de willekeurige namen). Bots zijn meteen klaar.
+
+## Als iemand wegvalt
+
+- **Een bot speelt mee.** Is een telefoon langer dan 30 seconden weg, of doet een team twee fasetimers
+  achter elkaar helemaal niets, dan speelt een bot voor die ploeg (winkelen, draften, voorbereiden,
+  tempo kiezen). De tv zet er "bot speelt mee" bij. Zodra de speler terugkomt of iets doet, is hij
+  weer zelf aan het stuur; op de telefoon staat ook een knop **Terug aan het stuur**.
+- **De president is weg?** Dan geeft het spel die rol aan een speler die nog verbonden is, zodat de
+  uitleg en de volgende etappe niet blijven hangen.
+- **Herstart van de server?** Kamers staan als JSON in `.cache/rooms` (of in `ROOMS_DIR`) en worden bij
+  het opstarten weer ingeladen: de timers lopen door, telefoons en tv sluiten vanzelf weer aan met
+  hun oude code. Kamers die langer dan drie uur stil lagen, worden opgeruimd.
 
 ## Hoe een etappe werkt
 
