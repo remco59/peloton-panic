@@ -84,23 +84,32 @@ export function makeShop(s: GameState, taken: Set<string>): ShopItem[] {
   return [...riders, ...contracts];
 }
 
+/** Het seizoen opent in de winkel, met eerst de sponsors: hun handgeld vergroot je budget voor de renners. */
 export function startRecruit(s: GameState): void {
   const taken = new Set(s.riders.map((r) => r.name));
   const shops: Record<string, ShopItem[]> = {};
   for (const t of s.teams) shops[t.id] = makeShop(s, taken);
   s.recruit = { shops };
   s.ready = {};
+  s.phase = 'sponsors';
+}
+
+/** De sponsors zijn getekend: nu de renners, met het budget dat overblijft. */
+export function endSponsors(s: GameState): void {
+  s.ready = {};
   s.phase = 'recruit';
 }
 
 export function recruitBuy(s: GameState, teamId: string, itemId: string): GameState {
-  if (s.phase !== 'recruit' || !s.recruit) throw new RuleError('Er wordt nu niet gerekruteerd');
+  if ((s.phase !== 'sponsors' && s.phase !== 'recruit') || !s.recruit) throw new RuleError('Er wordt nu niet gerekruteerd');
   const team = teamOf(s, teamId);
   if (s.ready[teamId]) throw new RuleError('Je staat op klaar: haal dat weg om nog te winkelen');
   const shop = s.recruit.shops[teamId] ?? [];
   const i = shop.findIndex((x) => x.id === itemId);
   if (i < 0) throw new RuleError('Dat ligt niet in jouw winkel');
   const item = shop[i];
+  if (item.kind === 'rider' && s.phase !== 'recruit') throw new RuleError('Eerst de sponsors, daarna de renners');
+  if (item.kind === 'contract' && s.phase !== 'sponsors') throw new RuleError('De sponsors zijn al getekend');
   if (item.kind === 'rider') {
     if (team.riderIds.length >= RECRUIT_PICKS) throw new RuleError(`Je hebt al ${RECRUIT_PICKS} renners`);
     if (item.price > team.coins) throw new RuleError(`${item.rider.name} kost ${item.price} munten en dat heb je niet`);
@@ -169,21 +178,25 @@ export function contractValue(d: CardDef): number {
 
 /**
  * De volgende stap van een bot (of de automatische piloot bij een time-out) in de winkel:
- * eerst de beste contracten tekenen, dan de renners kiezen, dan klaar. Null als er niets meer te doen is.
+ * eerst de beste contracten tekenen en klaar, daarna de renners kiezen en klaar. Null als er niets meer te doen is.
  */
 export function botShopStep(s: GameState, teamId: string, rand: () => number): Action | null {
   const team = teamOf(s, teamId);
   const shop = s.recruit?.shops[teamId] ?? [];
-  if (s.phase !== 'recruit' || s.ready[teamId]) return null;
+  if (s.ready[teamId]) return null;
 
-  // 1. Contracten: de waardevolste eerst. Direct geld vergroot meteen je budget voor renners.
-  if (team.slots.sponsor.length < SLOT_LIMITS.sponsor) {
-    const best = shop
-      .filter((x): x is Extract<ShopItem, { kind: 'contract' }> => x.kind === 'contract')
-      .map((x) => ({ x, v: contractValue(CARD_DEFS[x.def]) + rand() * 2 }))
-      .sort((a, b) => b.v - a.v)[0];
-    if (best) return { type: 'recruit', teamId, itemId: best.x.id };
+  // 1. Sponsors: de waardevolste eerst. Direct geld vergroot meteen je budget voor renners.
+  if (s.phase === 'sponsors') {
+    if (team.slots.sponsor.length < SLOT_LIMITS.sponsor) {
+      const best = shop
+        .filter((x): x is Extract<ShopItem, { kind: 'contract' }> => x.kind === 'contract')
+        .map((x) => ({ x, v: contractValue(CARD_DEFS[x.def]) + rand() * 2 }))
+        .sort((a, b) => b.v - a.v)[0];
+      if (best) return { type: 'recruit', teamId, itemId: best.x.id };
+    }
+    return { type: 'ready', teamId };
   }
+  if (s.phase !== 'recruit') return null;
 
   // 2. Renners: wat past bij het parcours, met een mix van types in de ploeg.
   if (team.riderIds.length < RECRUIT_PICKS) {

@@ -8,7 +8,7 @@ import { currentDraftTeam, teamOf } from './calc';
 import { advanceDraft, autoPick, buy, draftPick, install, sabotage, train } from './draft';
 import { join, setKopman, start } from './lobby';
 import { afterResolve, resolveRound, setEfforts, startRace } from './race';
-import { botShopStep, endNaming, endRecruit, nameRiders, recruitBuy, startRecruit } from './recruit';
+import { botShopStep, endNaming, endRecruit, endSponsors, nameRiders, recruitBuy, startRecruit } from './recruit';
 import { afterResults, rematch } from './results';
 import { offer, respond } from './trade';
 
@@ -74,19 +74,21 @@ export function reduce(prev: GameState, action: Action): GameState {
     case 'respond':
       return respond(s, action.teamId, action.offerId, action.accept);
     case 'ready':
-      if (s.phase !== 'team' && s.phase !== 'naming' && s.phase !== 'recruit') throw new RuleError('Nu kun je niet klaarzetten');
+      if (s.phase !== 'team' && s.phase !== 'naming' && s.phase !== 'recruit' && s.phase !== 'sponsors')
+        throw new RuleError('Nu kun je niet klaarzetten');
       if (s.phase === 'recruit' && teamOf(s, action.teamId).riderIds.length < RECRUIT_PICKS)
         throw new RuleError(`Kies eerst ${RECRUIT_PICKS} renners`);
       teamOf(s, action.teamId);
       s.ready[action.teamId] = true;
       if (s.teams.every((t) => s.ready[t.id])) {
-        if (s.phase === 'recruit') endRecruit(s);
+        if (s.phase === 'sponsors') endSponsors(s);
+        else if (s.phase === 'recruit') endRecruit(s);
         else if (s.phase === 'naming') endNaming(s);
         else startRace(s);
       }
       return s;
     case 'unready':
-      if (s.phase === 'team' || s.phase === 'naming' || s.phase === 'recruit') s.ready[action.teamId] = false;
+      if (s.phase === 'team' || s.phase === 'naming' || s.phase === 'recruit' || s.phase === 'sponsors') s.ready[action.teamId] = false;
       return s;
     case 'effort':
       return setEfforts(s, action.teamId, action.efforts, action.car, action.plays);
@@ -116,6 +118,7 @@ export function reduce(prev: GameState, action: Action): GameState {
 
 export function timeout(s: GameState): GameState {
   switch (s.phase) {
+    case 'sponsors':
     case 'recruit': {
       // Wie nog niet klaar is, krijgt een winkelbezoek op de automatische piloot.
       for (const t of s.teams) {
@@ -126,7 +129,8 @@ export function timeout(s: GameState): GameState {
           else s.ready[t.id] = true;
         }
       }
-      endRecruit(s);
+      if (s.phase === 'sponsors') endSponsors(s);
+      else endRecruit(s);
       break;
     }
     case 'naming':

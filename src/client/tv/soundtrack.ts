@@ -71,6 +71,7 @@ export class Soundtrack {
       case 'lobby':
       case 'briefing':
         return { morning: 0.55, farm: 0.22 };
+      case 'sponsors':
       case 'recruit':
       case 'naming':
       case 'draft':

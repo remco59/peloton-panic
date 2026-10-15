@@ -82,7 +82,10 @@ export function toPlayerView(s: GameState, teamId: string): PlayerView | null {
     offerOut: out ? withCards(s, out) : null,
     sabotageOn: t.sabotage,
     pickPending: s.phase === 'draft' && currentDraftTeam(s) === teamId,
-    shop: s.phase === 'recruit' ? (s.recruit?.shops[teamId] ?? []) : [],
+    // Eerst alleen de sponsors, daarna alleen de renners.
+    shop: (s.phase === 'sponsors' || s.phase === 'recruit' ? (s.recruit?.shops[teamId] ?? []) : []).filter(
+      (x) => x.kind === (s.phase === 'sponsors' ? 'contract' : 'rider'),
+    ),
     kopmanId: s.kopman[teamId] ?? t.riderIds[0],
     stats: t.stats,
   };

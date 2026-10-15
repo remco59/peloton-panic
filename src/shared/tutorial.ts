@@ -34,25 +34,34 @@ export function phoneHint(s: PublicState, c: HintContext): Hint | null {
             title: 'Zo begin je',
             steps: [
               'Te weinig spelers? Voeg bots toe met + BOT.',
-              'Druk op Start het seizoen als iedereen binnen is. Daarna winkelt iedereen eerst in zijn eigen winkel.',
+              'Druk op Start het seizoen als iedereen binnen is. Daarna winkelt iedereen eerst in zijn eigen winkel: sponsors, dan renners.',
               'Daarna ben je 3 etappes bezig.',
             ],
           }
         : {
             id: 'lobby-player',
             title: 'Even wachten',
-            steps: ['Je winkelt straks in je eigen winkel: drie renners en sponsors.', 'De president start het seizoen zodra iedereen er is.'],
+            steps: ['Je winkelt straks in je eigen winkel: eerst sponsors, dan drie renners.', 'De president start het seizoen zodra iedereen er is.'],
           };
     case 'briefing':
       return null; // de uitleg vooraf is zelf het scherm
+    case 'sponsors':
+      return {
+        id: 'sponsors-shop',
+        title: 'Eerst de sponsors',
+        steps: [
+          `Iedereen heeft een eigen winkel, dus je hoeft niet op een ander te wachten. Je begint met € ${START_COINS}.`,
+          'Teken maximaal twee sponsors. Ze kosten niets. Sommige betalen meteen, sommige alleen als je presteert, en sommige leveren spullen.',
+          'Wat een sponsor meteen betaalt, kun je in de volgende stap aan renners uitgeven. Druk op Klaar als je tevreden bent.',
+        ],
+      };
     case 'recruit':
       return {
         id: 'recruit-shop',
-        title: 'Je eigen winkel',
+        title: 'Nu de renners',
         steps: [
-          `Iedereen heeft een eigen winkel, dus je hoeft niet op een ander te wachten. Je begint met € ${START_COINS}.`,
-          'Tab Renners: kies er drie. Neo-profs zijn gratis, talenten en sterren kosten munten. Maak een mix van types.',
-          'Tab Sponsors: teken er maximaal twee. Ze kosten niets. Sommige betalen meteen, sommige alleen als je presteert, en sommige leveren spullen.',
+          'Kies er drie. Neo-profs zijn gratis, talenten en sterren kosten munten. Maak een mix van types.',
+          'Tik op een renner voor zijn eigenschappen en eigenaardigheid. Je sponsors staan bovenaan.',
           'Munten die je overhoudt, heb je later nodig voor kaarten. Druk op Klaar als je er drie hebt.',
         ],
       };
@@ -194,8 +203,10 @@ export function tvHint(s: PublicState): { title: string; text: string } | null {
       return null;
     case 'lobby':
       return { title: 'Meedoen', text: 'Scan de QR-code met je telefoon. De eerste speler is president en start het seizoen.' };
+    case 'sponsors':
+      return { title: 'De sponsors', text: 'Iedereen winkelt tegelijk in zijn eigen winkel. Eerst de sponsors: teken er maximaal twee. Ze kosten niets en sommige betalen meteen.' };
     case 'recruit':
-      return { title: 'De winkel', text: 'Iedereen winkelt tegelijk in zijn eigen winkel: kies drie renners en maximaal twee sponsors. Sterren kosten munten, neo-profs en sponsors zijn gratis.' };
+      return { title: 'De renners', text: 'Nu de renners: kies er drie uit je eigen winkel. Sterren kosten munten, neo-profs zijn gratis.' };
     case 'naming':
       return { title: 'Namen', text: 'Op je telefoon: geef je renners een naam en druk op Klaar. Er is geen timer.' };
     case 'draft':

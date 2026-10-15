@@ -526,7 +526,7 @@ export class TrackRenderer {
     wx: (t: number) => number,
     roadY: (t: number) => number,
   ) {
-    if (s.phase === 'lobby' || s.phase === 'briefing' || s.phase === 'recruit' || s.phase === 'naming' || s.phase === 'draft' || s.phase === 'team') return;
+    if (s.phase === 'lobby' || s.phase === 'briefing' || s.phase === 'sponsors' || s.phase === 'recruit' || s.phase === 'naming' || s.phase === 'draft' || s.phase === 'team') return;
     const c = this.ctx;
     c.font = FONT;
     c.textAlign = 'center';

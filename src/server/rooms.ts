@@ -16,6 +16,7 @@ import {
   recruitIntroLines,
   recruitLines,
   roundLines,
+  sponsorsIntroLines,
   stageLines,
   stageResultLines,
   teamPhaseLines,
@@ -39,7 +40,8 @@ import type { Action, GameState } from '../shared/types';
 import { warm } from './tts';
 
 export const TIMING = {
-  recruitMs: 90_000, // iedereen winkelt tegelijk in zijn eigen winkel
+  sponsorsMs: 75_000, // eerst de sponsors: iedereen kiest tegelijk uit zijn eigen zes contracten
+  recruitMs: 150_000, // dan de renners: negen kandidaten om te vergelijken, met het budget dat overblijft
   namingMs: 120_000, // renners een naam geven; daarna houdt wie niets deed de willekeurige namen
   draftMs: 20_000,
   teamMs: 90_000,
@@ -260,6 +262,7 @@ export class Room {
   /** Een team dat zojuist op de piloot is gezet, doet meteen mee met wat er in deze fase te doen is. */
   private kickAuto(teamId: string): void {
     switch (this.state.phase) {
+      case 'sponsors':
       case 'recruit':
         return this.scheduleBotRecruit([teamId]);
       case 'naming':
@@ -282,7 +285,7 @@ export class Room {
     const s = this.state;
     let waiting: string[] = [];
     if (s.phase === 'race') waiting = s.teams.filter((t) => !s.locked[t.id]).map((t) => t.id);
-    else if (s.phase === 'team' || s.phase === 'recruit' || s.phase === 'naming') waiting = s.teams.filter((t) => !s.ready[t.id]).map((t) => t.id);
+    else if (s.phase === 'team' || s.phase === 'sponsors' || s.phase === 'recruit' || s.phase === 'naming') waiting = s.teams.filter((t) => !s.ready[t.id]).map((t) => t.id);
     else if (s.phase === 'draft' && s.draft) waiting = [s.draft.order[s.draft.idx]];
     for (const t of s.teams) {
       if (this.botLike(t.id)) continue;
@@ -443,6 +446,12 @@ export class Room {
         this.say([BRIEFING[0].say], true);
         break;
       }
+      case 'sponsors': {
+        this.say([...sponsorsIntroLines(pub), ...this.explain('sponsors')]);
+        this.setPhaseTimer(this.scaled(TIMING.sponsorsMs), { type: 'timeout' });
+        this.scheduleBotRecruit();
+        break;
+      }
       case 'recruit': {
         this.say([...recruitIntroLines(pub), ...this.explain('recruit')]);
         this.setPhaseTimer(this.scaled(TIMING.recruitMs), { type: 'timeout' });
@@ -529,11 +538,13 @@ export class Room {
 
   // ---- Bots ----
 
+  /** Bots winkelen in de sponsorfase en in de rekruteerfase; in elke fase begint hun planning opnieuw. */
   private scheduleBotRecruit(only?: string[]): void {
+    const phase = this.state.phase;
     for (const t of this.state.teams) {
       if (!this.botLike(t.id) || (only && !only.includes(t.id))) continue;
       const step = () => {
-        if (this.state.phase !== 'recruit' || !this.botLike(t.id)) return;
+        if (this.state.phase !== phase || !this.botLike(t.id)) return;
         const next = botShopStep(this.state, t.id, Math.random);
         if (!next) return;
         this.dispatch(next);

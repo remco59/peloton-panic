@@ -111,6 +111,18 @@ describe('president actions', () => {
   });
 });
 
+/** Beide winkelstappen, sponsors en dan renners, laten aflopen. */
+const SHOP_MS = TIMING.sponsorsMs + TIMING.recruitMs + 2;
+
+/** De mens zet de sponsors op klaar, wacht tot de bots ook klaar zijn en laat dan de rennertimer aflopen. */
+function toNaming(room: Room, a: { teamId: string }): void {
+  room.playerAct(a.teamId, { type: 'ready' });
+  for (let i = 0; i < 60 && room.state.phase === 'sponsors'; i++) vi.advanceTimersByTime(1_000);
+  expect(room.state.phase).toBe('recruit');
+  vi.advanceTimersByTime(TIMING.recruitMs + 1);
+  expect(room.state.phase).toBe('naming');
+}
+
 describe('phase timers and bots', () => {
   function startedRoom() {
     const room = createRoom('http://x');
@@ -127,30 +139,51 @@ describe('phase timers and bots', () => {
     expect(room.state.phase).toBe('briefing');
 
     room.president(a.teamId, 'briefDone');
-    expect(room.state.phase).toBe('recruit');
+    expect(room.state.phase).toBe('sponsors');
     expect(room.phaseEndsAt).toBeGreaterThan(Date.now());
   });
 
-  it('moves on when the recruit timer runs out, even if the human never acts', () => {
-    const { room, a } = startedRoom();
-    room.president(a.teamId, 'briefDone');
-    vi.advanceTimersByTime(TIMING.recruitMs + 1);
-    expect(room.state.phase).not.toBe('recruit');
+  it('gives the shop steps a generous timer each: sponsors first, then riders', () => {
+    expect(TIMING.sponsorsMs).toBeGreaterThanOrEqual(60_000);
+    expect(TIMING.recruitMs).toBeGreaterThanOrEqual(120_000);
   });
 
-  it('lets bots shop during recruit', () => {
+  it('moves on when the sponsor and recruit timers run out, even if the human never acts', () => {
+    const { room, a } = startedRoom();
+    room.president(a.teamId, 'briefDone');
+    vi.advanceTimersByTime(TIMING.sponsorsMs + 1);
+    expect(room.state.phase).toBe('recruit');
+    expect(room.phaseEndsAt).toBeGreaterThan(Date.now());
+    vi.advanceTimersByTime(TIMING.recruitMs + 1);
+    expect(room.state.phase).toBe('naming');
+  });
+
+  it('moves on to the riders as soon as every team has its sponsors ready', () => {
+    const { room, a } = startedRoom();
+    room.president(a.teamId, 'briefDone');
+    vi.advanceTimersByTime(30_000); // the bot has signed and is ready
+    expect(room.state.phase).toBe('sponsors');
+    room.playerAct(a.teamId, { type: 'ready' });
+    expect(room.state.phase).toBe('recruit');
+  });
+
+  it('lets bots shop sponsors first, then riders', () => {
     const { room, a } = startedRoom();
     room.president(a.teamId, 'briefDone');
     vi.advanceTimersByTime(30_000);
     const bot = room.state.teams.find((t) => t.isBot)!;
-    expect(bot.riderIds.length).toBeGreaterThan(0);
+    expect(room.state.phase).toBe('sponsors');
+    expect(bot.slots.sponsor.length).toBe(2);
+    expect(bot.riderIds.length).toBe(0);
+    room.playerAct(a.teamId, { type: 'ready' });
+    vi.advanceTimersByTime(30_000);
+    expect(room.state.teams.find((t) => t.isBot)!.riderIds.length).toBeGreaterThan(0);
   });
 
   it('waits in naming for the human, but moves on after the naming timer', () => {
     const { room, a } = startedRoom();
     room.president(a.teamId, 'briefDone');
-    vi.advanceTimersByTime(TIMING.recruitMs + 1);
-    expect(room.state.phase).toBe('naming');
+    toNaming(room, a);
     expect(room.phaseEndsAt).toBeGreaterThan(Date.now());
     vi.advanceTimersByTime(TIMING.namingMs - 5_000);
     expect(room.state.phase).toBe('naming');
@@ -161,8 +194,7 @@ describe('phase timers and bots', () => {
   it('runs on from naming to the race by itself once the human is ready', () => {
     const { room, a } = startedRoom();
     room.president(a.teamId, 'briefDone');
-    vi.advanceTimersByTime(TIMING.recruitMs + 1);
-    expect(room.state.phase).toBe('naming');
+    toNaming(room, a);
     room.playerAct(a.teamId, { type: 'ready' });
     // draft -> team -> race, each ending on its own timer
     for (let i = 0; i < 40 && room.state.phase !== 'race'; i++) vi.advanceTimersByTime(30_000);
@@ -192,8 +224,7 @@ describe('automatic pilot', () => {
     expect(room.autopilot.has(a.teamId)).toBe(false);
 
     // Anna ready up in naming: Ben must not hold the game up.
-    vi.advanceTimersByTime(TIMING.recruitMs + 1);
-    expect(room.state.phase).toBe('naming');
+    toNaming(room, a);
     room.playerAct(a.teamId, { type: 'ready' });
     vi.advanceTimersByTime(10_000);
     expect(room.state.phase).toBe('draft');
@@ -246,7 +277,7 @@ describe('automatic pilot', () => {
     vi.advanceTimersByTime(TIMING.awayGraceMs + 1_000);
     expect(room.presidentTeamId).toBe(b.teamId);
     room.president(b.teamId, 'briefDone');
-    expect(room.state.phase).toBe('recruit');
+    expect(room.state.phase).toBe('sponsors');
   });
 
   it('flags a team that does nothing for two phase timers, but not one that acts', () => {
@@ -255,14 +286,15 @@ describe('automatic pilot', () => {
     const b = room.join(sock(), 'Ben');
     room.president(a.teamId, 'start');
     room.president(a.teamId, 'briefDone');
-    // Recruit timer: Anna shops, Ben does nothing at all.
+    // Sponsor timer: Anna signs one, Ben does nothing at all.
     const shop = room.state.recruit!.shops[a.teamId];
-    room.playerAct(a.teamId, { type: 'recruit', itemId: shop.find((x) => x.kind === 'rider')!.id });
-    vi.advanceTimersByTime(TIMING.recruitMs + 1);
+    room.playerAct(a.teamId, { type: 'recruit', itemId: shop.find((x) => x.kind === 'contract')!.id });
+    vi.advanceTimersByTime(TIMING.sponsorsMs + 1);
+    expect(room.state.phase).toBe('recruit');
     expect(room.autopilot.has(b.teamId)).toBe(false); // one miss is not enough
-    room.playerAct(a.teamId, { type: 'ready' });
-    // Naming timer: nobody acts for Ben again -> second miss.
-    vi.advanceTimersByTime(TIMING.namingMs + 1);
+    // Recruit timer: Anna picks a rider, nobody acts for Ben again -> second miss.
+    room.playerAct(a.teamId, { type: 'recruit', itemId: room.state.recruit!.shops[a.teamId].find((x) => x.kind === 'rider')!.id });
+    vi.advanceTimersByTime(TIMING.recruitMs + 1);
     expect(room.autopilot.has(b.teamId)).toBe(true);
     expect(room.autopilot.has(a.teamId)).toBe(false);
   });
@@ -273,7 +305,7 @@ describe('automatic pilot', () => {
     const b = room.join(sock(), 'Ben');
     room.president(a.teamId, 'start');
     room.president(a.teamId, 'briefDone');
-    vi.advanceTimersByTime(TIMING.recruitMs + 1);
+    vi.advanceTimersByTime(SHOP_MS);
     vi.advanceTimersByTime(TIMING.namingMs + 1);
     expect(room.autopilot.has(b.teamId)).toBe(true);
     room.playerAct(b.teamId, { type: 'unready' });
@@ -312,7 +344,7 @@ describe('persistence', () => {
     expect(getRoom(code)).toBeUndefined();
     expect(enablePersistence(dir)).toBe(1);
     const again = getRoom(code)!;
-    expect(again.state.phase).toBe('recruit');
+    expect(again.state.phase).toBe('sponsors');
     expect(again.state.teams.map((t) => t.name)).toEqual(before.teams.map((t: { name: string }) => t.name));
     expect(again.presidentTeamId).toBe(a.teamId);
 
@@ -339,9 +371,9 @@ describe('persistence', () => {
     const again = getRoom(code)!;
     expect(again.feed).toEqual([]); // no commentary replayed on restore
     expect(again.phaseEndsAt).toBeLessThanOrEqual(endsAt + 1_000);
-    expect(again.state.phase).toBe('recruit');
-    vi.advanceTimersByTime(TIMING.recruitMs - 40_000 + 1_000);
-    expect(again.state.phase).not.toBe('recruit');
+    expect(again.state.phase).toBe('sponsors');
+    vi.advanceTimersByTime(TIMING.sponsorsMs - 40_000 + 1_000);
+    expect(again.state.phase).not.toBe('sponsors');
   });
 
   it('puts a restored team on autopilot if its phone never reconnects', () => {

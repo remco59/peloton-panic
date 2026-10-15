@@ -282,12 +282,12 @@ export const BRIEFING: BriefPage[] = [
     title: 'Het doel',
     lead: 'Jullie managen elk een wielerploeg van drie renners. Wie na drie etappes de meeste punten heeft, wint.',
     points: [
-      { head: 'Je eigen winkel', text: 'Eerst winkelt iedereen tegelijk in zijn eigen winkel, met € 10: drie renners en maximaal twee sponsors.' },
+      { head: 'Je eigen winkel', text: 'Eerst winkelt iedereen tegelijk in zijn eigen winkel, met € 10: eerst maximaal twee sponsors, dan drie renners.' },
       { head: 'Drie etappes', text: 'Elke etappe heeft een eigen parcours en eigen weer: vlak, bergen, droog of nat.' },
       { head: 'Punten', text: 'Je scoort met de eindstand van je renners en met premies onderweg.' },
       { head: 'Slotetappe', text: 'De laatste etappe telt dubbel, dus niemand is kansloos.' },
     ],
-    say: { speaker: 'johan', text: 'Jullie managen elk een ploeg van drie renners. Na drie etappes wint het team met de meeste punten. Eerst winkelt iedereen in zijn eigen winkel.' },
+    say: { speaker: 'johan', text: 'Jullie managen elk een ploeg van drie renners. Na drie etappes wint het team met de meeste punten. Eerst winkelt iedereen in zijn eigen winkel: sponsors, dan renners.' },
   },
   {
     title: 'Een etappe in vier stappen',

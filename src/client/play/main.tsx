@@ -473,7 +473,8 @@ function Game({
   const title: Record<string, string> = {
     lobby: 'Lobby',
     briefing: 'Uitleg',
-    recruit: 'Rekruteren',
+    sponsors: 'Sponsors',
+    recruit: 'Renners',
     naming: 'Namen',
     draft: 'Draft',
     team: 'Voorbereiding',
@@ -514,7 +515,7 @@ function Game({
         <main key={state.phase}>
           {state.phase === 'lobby' && <Lobby view={view} act={act} president={president} />}
           {state.phase === 'briefing' && <Briefing view={view} act={act} president={president} />}
-          {state.phase === 'recruit' && <Recruit view={view} act={act} />}
+          {(state.phase === 'sponsors' || state.phase === 'recruit') && <Recruit view={view} act={act} />}
           {state.phase === 'naming' && <Naming view={view} act={act} />}
           {state.phase === 'draft' && <Draft view={view} act={act} />}
           {state.phase === 'team' && <TeamPhase view={view} act={act} />}
@@ -626,8 +627,9 @@ function Lobby({ view, president }: GameProps) {
         <div class="frame recruit-note">
           <div class="ty">JE EIGEN WINKEL</div>
           <p class="dim">
-            Na de uitleg opent iedereen zijn eigen winkel met € {START_COINS}. Kies {RECRUIT_PICKS} renners (neo-profs zijn
-            gratis, sterren kosten munten) en teken sponsors: die betalen meteen, betalen bij succes of leveren spullen.
+            Na de uitleg opent iedereen zijn eigen winkel met € {START_COINS}. Eerst teken je sponsors: die betalen meteen,
+            betalen bij succes of leveren spullen. Daarna kies je {RECRUIT_PICKS} renners (neo-profs zijn gratis, sterren
+            kosten munten).
           </p>
         </div>
       </div>
@@ -842,9 +844,11 @@ function ProfileLegend({ state }: { state: PublicState }) {
 type RiderItem = Extract<ShopItem, { kind: 'rider' }>;
 type ContractItem = Extract<ShopItem, { kind: 'contract' }>;
 
+/** De winkel in twee stappen: eerst de sponsors (fase `sponsors`), dan de renners (fase `recruit`). */
 function Recruit({ view, act }: ViewProps) {
   const { state, me, teamId } = view;
   const rc = state.recruit!;
+  const sponsorStep = state.phase === 'sponsors';
   const team = state.teams.find((t) => t.id === teamId)!;
   const shop = me?.shop ?? [];
   const riders = shop
@@ -858,7 +862,6 @@ function Recruit({ view, act }: ViewProps) {
   const full = have.length >= rc.picks;
   const sponsorsFull = signed.length >= rc.contracts;
   const readyCount = state.teams.filter((t) => t.ready).length;
-  const [tab, setTab] = useState<'riders' | 'sponsors'>('riders');
   // Op id, niet op plek: een gekocht ding verdwijnt uit de lijst.
   const [open, setOpen] = useState<string | null>(null);
   const item = open !== null ? shop.find((x) => x.id === open) : undefined;
@@ -867,6 +870,8 @@ function Recruit({ view, act }: ViewProps) {
     act({ type: 'recruit', itemId: id });
     setOpen(null);
   };
+  // Sponsors mag je overslaan; voor de renners heb je er precies drie nodig.
+  const missing = sponsorStep ? 0 : rc.picks - have.length;
   return (
     <section class="screen">
       <TutorialHint hint={hintFor(view, {})} />
@@ -876,35 +881,47 @@ function Recruit({ view, act }: ViewProps) {
           <b class="ty">€ {team.coins}</b>
         </span>
         <span>
-          <span class="small">Renners</span>
-          <b class="ty">
-            {have.length}/{rc.picks}
-          </b>
-        </span>
-        <span>
           <span class="small">Sponsors</span>
           <b class="ty">
             {signed.length}/{rc.contracts}
           </b>
         </span>
+        {!sponsorStep && (
+          <span>
+            <span class="small">Renners</span>
+            <b class="ty">
+              {have.length}/{rc.picks}
+            </b>
+          </span>
+        )}
       </div>
       {(have.length > 0 || signed.length > 0) && (
         <div class="small shop-mine">
           {[
-            ...have.map((r) => `${firstName(r.name)} (${RIDER_TYPES[r.type].label})`),
             ...signed.map((d) => CARD_DEFS[d].name),
+            ...have.map((r) => `${firstName(r.name)} (${RIDER_TYPES[r.type].label})`),
           ].join(' · ')}
         </div>
       )}
-      <div class="tabs two">
-        <button class={`tab ty ${tab === 'riders' ? 'on' : ''}`} onClick={() => setTab('riders')}>
-          RENNERS<span class="badge">{riders.length}</span>
-        </button>
-        <button class={`tab ty ${tab === 'sponsors' ? 'on' : ''}`} onClick={() => setTab('sponsors')}>
-          SPONSORS<span class="badge">{contracts.length}</span>
-        </button>
-      </div>
-      {tab === 'riders' ? (
+      {sponsorStep ? (
+        <div class="cands">
+          <p class="dim s">
+            Eerst de sponsors. Ze kosten niets, maar je tekent er maximaal {rc.contracts}. Sommige betalen meteen (dat geld kun je
+            straks aan renners uitgeven), sommige alleen als je presteert, en sommige leveren spullen.
+          </p>
+          <div class="cards">
+            {contracts.map((c, i) => {
+              const kind = CARD_DEFS[c.def].contract!;
+              return (
+                <div class="ct" key={c.id}>
+                  <CardTile def={c.def} index={i} dim={sponsorsFull} onClick={() => setOpen(c.id)} />
+                  <span class={`ct-tag ${kind}`}>{CONTRACT_LABELS[kind].label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
         <div class="cands">
           {riders.map((c) => {
             const r = c.rider;
@@ -939,37 +956,28 @@ function Recruit({ view, act }: ViewProps) {
             );
           })}
         </div>
-      ) : (
-        <div class="cands">
-          <p class="dim s">
-            Sponsors kosten niets, maar je tekent er maximaal {rc.contracts}. Sommige betalen meteen, sommige alleen als je presteert,
-            en sommige leveren spullen.
-          </p>
-          <div class="cards">
-            {contracts.map((c, i) => {
-              const kind = CARD_DEFS[c.def].contract!;
-              return (
-                <div class="ct" key={c.id}>
-                  <CardTile def={c.def} index={i} dim={sponsorsFull} onClick={() => setOpen(c.id)} />
-                  <span class={`ct-tag ${kind}`}>{CONTRACT_LABELS[kind].label}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
       )}
       <div class="dock">
-        {team.ready && <p class="dim center s">Je staat op klaar. Tik op wijzig om nog iets te kopen.</p>}
+        {team.ready && (
+          <p class="dim center s">
+            Je staat op klaar. Tik op wijzig om nog iets te {sponsorStep ? 'tekenen' : 'kopen'}.
+          </p>
+        )}
+        {sponsorStep && !team.ready && signed.length === 0 && (
+          <p class="dim center s">Je hebt nog geen sponsor getekend. Dat mag, maar sponsors kosten niets.</p>
+        )}
         <button
           class={`big ty ${team.ready ? '' : 'primary'}`}
-          disabled={!team.ready && have.length < rc.picks}
+          disabled={!team.ready && missing > 0}
           onClick={() => act(team.ready ? { type: 'unready' } : { type: 'ready' })}
         >
           {team.ready
             ? `KLAAR (${readyCount}/${state.teams.length}) · WIJZIG`
-            : have.length < rc.picks
-              ? `KIES NOG ${rc.picks - have.length} RENNER${rc.picks - have.length === 1 ? '' : 'S'}`
-              : `KLAAR (${readyCount}/${state.teams.length})`}
+            : missing > 0
+              ? `KIES NOG ${missing} RENNER${missing === 1 ? '' : 'S'}`
+              : sponsorStep
+                ? `KLAAR, NAAR DE RENNERS (${readyCount}/${state.teams.length})`
+                : `KLAAR (${readyCount}/${state.teams.length})`}
         </button>
       </div>
       {item?.kind === 'rider' && (

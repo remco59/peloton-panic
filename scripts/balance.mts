@@ -198,12 +198,14 @@ function playSeason(seed: number, order: Policy[], st: Stats): void {
       case 'briefing':
         s = reduce(s, { type: 'briefDone' });
         break;
+      case 'sponsors':
       case 'recruit': {
+        const phase = s.phase;
         for (const t of s.teams) {
           let a = botShopStep(s, t.id, rand);
           while (a) {
             s = reduce(s, a);
-            a = s.phase === 'recruit' ? botShopStep(s, t.id, rand) : null;
+            a = s.phase === phase ? botShopStep(s, t.id, rand) : null;
           }
         }
         break;

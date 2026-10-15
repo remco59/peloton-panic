@@ -171,7 +171,7 @@ function App() {
   const clock = () => Date.now() + offset.current;
   const inRace = state.phase === 'race' || state.phase === 'resolve' || state.phase === 'results';
   const veiled = state.phase === 'lobby' || state.phase === 'briefing' || state.phase === 'results' || state.phase === 'finished';
-  const panelPhase = state.phase === 'draft' || state.phase === 'team' || state.phase === 'recruit' || state.phase === 'naming';
+  const panelPhase = state.phase === 'draft' || state.phase === 'team' || state.phase === 'sponsors' || state.phase === 'recruit' || state.phase === 'naming';
 
   return (
     <div class="tv">
@@ -183,7 +183,7 @@ function App() {
           {inRace ? <EventCard state={state} /> : <StageCard state={state} />}
           <Standings snap={snap} />
         </aside>
-        {state.phase === 'recruit' && <RecruitPanel snap={snap} />}
+        {(state.phase === 'sponsors' || state.phase === 'recruit') && <RecruitPanel snap={snap} />}
         {state.phase === 'naming' && <NamingPanel snap={snap} />}
         {state.phase === 'draft' && <DraftPanel snap={snap} />}
         {state.phase === 'team' && <TeamPanel snap={snap} />}
@@ -212,13 +212,14 @@ function Header({ snap, clock, online }: { snap: Snapshot; clock: () => number; 
   const [muted, setMuted] = useState(sound.muted);
   useEffect(() => {
     // The last seconds of a timer tick down out loud.
-    const timed = state.phase === 'recruit' || state.phase === 'draft' || state.phase === 'team' || state.phase === 'race';
+    const timed = state.phase === 'sponsors' || state.phase === 'recruit' || state.phase === 'draft' || state.phase === 'team' || state.phase === 'race';
     if (timed && left !== null && left > 0 && left <= 3) sound.ui('count');
   }, [left, state.phase]);
   const label: Record<string, string> = {
     lobby: 'Lobby',
     briefing: 'Eerst de uitleg',
-    recruit: 'Winkel: renners en sponsors',
+    sponsors: 'Winkel: kies je sponsors',
+    recruit: 'Winkel: kies je renners',
     naming: 'Geef je renners een naam',
     draft: 'Draft: kies je kaarten',
     team: 'Voorbereiding',
@@ -427,7 +428,7 @@ function Standings({ snap }: { snap: Snapshot }) {
       {rows.map((t, i) => {
         const col = colorOf(t);
         let waiting = '';
-        if (state.phase === 'team' || state.phase === 'recruit') waiting = t.ready ? 'KLAAR' : 'BEZIG';
+        if (state.phase === 'team' || state.phase === 'sponsors' || state.phase === 'recruit') waiting = t.ready ? 'KLAAR' : 'BEZIG';
         else if (state.phase === 'draft') waiting = state.draft?.currentTeamId === t.id ? 'AAN DE BEURT' : '';
         const turn = waiting === 'AAN DE BEURT';
         const rs = ridersOf(state, t.id);
@@ -613,13 +614,14 @@ function NamingPanel({ snap }: { snap: Snapshot }) {
 function RecruitPanel({ snap }: { snap: Snapshot }) {
   const { state } = snap;
   const rc = state.recruit!;
+  const sponsorStep = state.phase === 'sponsors';
   const done = state.teams.filter((t) => t.ready).length;
   return (
     <div class="panel frame">
       <div class="ph-head">
         <div>
           <div class="big-line ty">
-            {done}/{state.teams.length} teams klaar. Iedereen winkelt tegelijk, in zijn eigen winkel.
+            {done}/{state.teams.length} teams klaar. {sponsorStep ? 'Eerst de sponsors.' : 'Nu de renners.'} Iedereen winkelt tegelijk, in zijn eigen winkel.
           </div>
         </div>
       </div>
@@ -639,7 +641,7 @@ function RecruitPanel({ snap }: { snap: Snapshot }) {
                 </span>
                 <span class={`rd ty ${t.ready ? 'ok' : ''}`}>{t.ready ? 'KLAAR' : 'BEZIG'}</span>
               </div>
-              {Array.from({ length: rc.picks }, (_, i) => {
+              {!sponsorStep && Array.from({ length: rc.picks }, (_, i) => {
                 const r = riders[i];
                 return r ? (
                   <div class="br" key={r.id}>
@@ -677,8 +679,9 @@ function RecruitPanel({ snap }: { snap: Snapshot }) {
         })}
       </div>
       <p class="hint">
-        Drie renners en maximaal twee sponsors per team. Sponsors betalen meteen, betalen bij succes of leveren spullen. Bij tegenstanders
-        zie je pas wat ze tekenen als ze het doen.
+        {sponsorStep
+          ? 'Eerst maximaal twee sponsors per team. Sponsors betalen meteen, betalen bij succes of leveren spullen. Bij tegenstanders zie je pas wat ze tekenen als ze het doen. Daarna kiest iedereen drie renners.'
+          : 'Nu drie renners per team, met het budget dat na de sponsors overblijft. Bij tegenstanders zie je pas wie ze kiezen als ze het doen.'}
       </p>
     </div>
   );
