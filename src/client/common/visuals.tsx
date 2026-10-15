@@ -230,20 +230,14 @@ interface AvatarProps {
 /** Een gezicht met helm in de kleuren van de ploeg: elke renner ziet er anders uit. */
 export function RiderAvatar({ rider, color, size = 40, bg = true, class: cls = '' }: AvatarProps) {
   const col = color === undefined ? { hex: '#7d86a8', dark: '#4e567a' } : teamHex(color);
-  const clip = `ra-${rider.id}`;
+  // Geen <clipPath id>: dezelfde renner staat vaak meerdere keren op het scherm, en dubbele id's
+  // wijzen allemaal naar de eerste, ook als die in een verborgen paneel zit. Het ronde masker staat in CSS.
   return (
     <svg class={`ravatar ${cls}`} viewBox="0 0 64 64" width={size} height={size} aria-hidden="true">
-      <defs>
-        <clipPath id={clip}>
-          <circle cx="32" cy="32" r="32" />
-        </clipPath>
-      </defs>
-      <g clip-path={`url(#${clip})`}>
-        {bg && <rect width="64" height="64" fill={shade(col.hex, -62)} />}
-        {bg && <circle cx="32" cy="28" r="26" fill={shade(col.hex, -48)} opacity="0.7" />}
-        <Jersey color={col} />
-        <Head who={rider} color={col} />
-      </g>
+      {bg && <rect width="64" height="64" fill={shade(col.hex, -62)} />}
+      {bg && <circle cx="32" cy="28" r="26" fill={shade(col.hex, -48)} opacity="0.7" />}
+      <Jersey color={col} />
+      <Head who={rider} color={col} />
     </svg>
   );
 }
@@ -342,12 +336,14 @@ export function TeamStack({ riders, color, size = 30 }: { riders: Who[]; color: 
 
 // ---- Medaille, munten, kaarten, kroon -----------------------------------------
 
+let uid = 0;
+
 export function Medal({ place, size = 26 }: { place: number; size?: number }) {
   const gold = ['#ffe27a', '#e6a800', '#7a5600'];
   const silver = ['#f4f6fb', '#aeb6cc', '#4d556e'];
   const bronze = ['#f2b27e', '#c27530', '#6a3a12'];
   const [a, b, c] = place === 1 ? gold : place === 2 ? silver : place === 3 ? bronze : ['#3b4260', '#2a2f45', '#8b91ab'];
-  const id = `md-${place}`;
+  const id = `md-${place}-${++uid}`;
   return (
     <svg class="medal" viewBox="0 0 32 32" width={size} height={size} role="img" aria-label={`${place}e plek`}>
       <defs>
