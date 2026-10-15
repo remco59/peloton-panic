@@ -134,6 +134,11 @@ function handle(ws: WebSocket, conn: Conn, msg: ClientMsg): void {
       room.attachTv(ws);
       return;
     }
+    case 'tv:control': {
+      if (conn.role !== 'tv' || !conn.room) return;
+      conn.room.tvControl(msg.what);
+      return;
+    }
     case 'player:join': {
       const room = getRoom(msg.code);
       if (!room) return void send(ws, { t: 'error', message: 'No room with that code', fatal: true });

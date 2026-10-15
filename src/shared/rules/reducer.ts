@@ -9,7 +9,7 @@ import { advanceDraft, autoPick, buy, draftPick, install, sabotage, train } from
 import { join, setKopman, start } from './lobby';
 import { afterResolve, resolveRound, setEfforts, startRace } from './race';
 import { botShopStep, endNaming, endRecruit, endSponsors, nameRiders, recruitBuy, startRecruit } from './recruit';
-import { afterResults, rematch } from './results';
+import { afterResults, rematch, stopGame } from './results';
 import { offer, respond } from './trade';
 
 // ---- Reducer -----------------------------------------------------------------
@@ -105,6 +105,8 @@ export function reduce(prev: GameState, action: Action): GameState {
       return timeout(s);
     case 'rematch':
       return rematch(s);
+    case 'stop':
+      return stopGame(s);
     case 'removeBot': {
       if (s.phase !== 'lobby') throw new RuleError('Bots verwijder je alleen in de lobby');
       const last = s.teams[s.teams.length - 1];

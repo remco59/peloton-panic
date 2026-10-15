@@ -111,6 +111,51 @@ describe('president actions', () => {
   });
 });
 
+describe('tv controls', () => {
+  it('starts the season from the tv once there are two teams', () => {
+    const room = createRoom('http://x');
+    const a = room.join(sock(), 'Anna');
+    expect(() => room.tvControl('start')).toThrow(RuleError);
+    room.president(a.teamId, 'addBot');
+    room.tvControl('start');
+    expect(room.state.phase).toBe('briefing');
+  });
+
+  it('stops a running game and returns everyone to the lobby, then starts a new one', () => {
+    vi.useFakeTimers();
+    try {
+      const room = createRoom('http://x');
+      const a = room.join(sock(), 'Anna');
+      room.president(a.teamId, 'addBot');
+      room.tvControl('start');
+      room.president(a.teamId, 'briefDone');
+      expect(room.state.phase).toBe('sponsors');
+
+      room.tvControl('stop');
+      expect(room.state.phase).toBe('lobby');
+      expect(room.state.teams).toHaveLength(2);
+      expect(room.state.riders).toHaveLength(0);
+      expect(room.phaseEndsAt).toBeNull();
+      expect(room.autopilot.size).toBe(0);
+
+      // Geen verlopen timer van het afgebroken spel mag de lobby nog verstoren.
+      vi.advanceTimersByTime(TIMING.sponsorsMs + 5_000);
+      expect(room.state.phase).toBe('lobby');
+
+      room.tvControl('start');
+      expect(room.state.phase).toBe('briefing');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('refuses to stop when no game is running', () => {
+    const room = createRoom('http://x');
+    room.join(sock(), 'Anna');
+    expect(() => room.tvControl('stop')).toThrow(RuleError);
+  });
+});
+
 /** Beide winkelstappen, sponsors en dan renners, laten aflopen. */
 const SHOP_MS = TIMING.sponsorsMs + TIMING.recruitMs + 2;
 

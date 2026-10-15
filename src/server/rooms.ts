@@ -34,7 +34,7 @@ import {
   toPlayerView,
   toPublic,
 } from '../shared/engine';
-import type { ClientMsg, FeedBatch, PlayerAction, PresidentAction, RoomInfo, ServerMsg } from '../shared/protocol';
+import type { ClientMsg, FeedBatch, PlayerAction, PresidentAction, RoomInfo, ServerMsg, TvControl } from '../shared/protocol';
 import { BRIEFING } from '../shared/content';
 import type { Action, GameState } from '../shared/types';
 import { warm } from './tts';
@@ -367,6 +367,12 @@ export class Room {
     }
   }
 
+  /** Een bediening vanaf de tv of laptop: starten, het spel afbreken of een nieuw seizoen beginnen. */
+  tvControl(what: TvControl): void {
+    this.lastActive = Date.now();
+    this.dispatch({ type: what });
+  }
+
   /** De enige plek waar de toestand verandert: timers, bots en commentaar bij overgangen. */
   dispatch(action: Action): void {
     const prev = this.state;
@@ -380,7 +386,13 @@ export class Room {
       const say = BRIEFING[s.briefing.page]?.say;
       if (say) this.say([say], true);
     }
-    if (action.type === 'setTutorial' || action.type === 'rematch') this.explained.clear();
+    if (action.type === 'setTutorial' || action.type === 'rematch' || action.type === 'stop') this.explained.clear();
+    if (action.type === 'rematch' || action.type === 'stop') {
+      // Een nieuw spel begint schoon: niemand speelt nog op de piloot of heeft strafpunten.
+      this.autopilot.clear();
+      this.missed.clear();
+      this.acted.clear();
+    }
 
     const draftTurn = (x: GameState) => (x.phase === 'draft' && x.draft ? x.draft.idx : -1);
     const changed =
