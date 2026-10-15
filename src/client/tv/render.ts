@@ -12,9 +12,8 @@ export const W = 480;
 export const H = 270;
 const SCALE = 4;
 const TW = 30; // logical px per tile
-const LANES = 6;
+const MIN_LANES = 6; // met minder teams blijft de weg even breed; daarboven krijgt elk team een eigen baan
 const LANE_H = 11;
-const BAND = LANES * LANE_H;
 const BASE_Y = 160; // road centre line at the camera tile
 const SLOPE = 7; // px of elevation per climbing / descending tile
 const ANIM_MS = 3600;
@@ -95,6 +94,25 @@ function shapePath(c: CanvasRenderingContext2D, shape: string, x: number, y: num
     c.lineTo(x - r, y - t);
     c.lineTo(x - t, y - t);
     c.closePath();
+  } else if (shape === 'star') {
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + (Math.PI / 5) * i;
+      const rr = i % 2 ? r * 0.5 : r * 1.15;
+      const px = x + Math.cos(a) * rr;
+      const py = y + Math.sin(a) * rr;
+      if (i) c.lineTo(px, py);
+      else c.moveTo(px, py);
+    }
+    c.closePath();
+  } else if (shape === 'pentagon') {
+    for (let i = 0; i < 5; i++) {
+      const a = -Math.PI / 2 + ((Math.PI * 2) / 5) * i;
+      const px = x + Math.cos(a) * r;
+      const py = y + Math.sin(a) * r;
+      if (i) c.lineTo(px, py);
+      else c.moveTo(px, py);
+    }
+    c.closePath();
   } else {
     c.arc(x, y, r, 0, Math.PI * 2);
   }
@@ -127,6 +145,9 @@ export class TrackRenderer {
   private sunGlow!: CanvasGradient;
   private grassNear!: CanvasGradient;
   private vignette!: CanvasGradient;
+
+  private lanes = MIN_LANES;
+  private band = MIN_LANES * LANE_H;
 
   constructor(private canvas: HTMLCanvasElement) {
     canvas.width = W * SCALE;
@@ -209,8 +230,10 @@ export class TrackRenderer {
     const s = this.state!;
     const ctx = this.ctx;
     ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+    this.lanes = Math.max(MIN_LANES, s.teams.length);
+    this.band = this.lanes * LANE_H;
     const colors = s.teams.map((t) => TEAM_COLORS[t.color % TEAM_COLORS.length]);
-    const laneOffset = Math.floor((LANES - Math.max(1, s.teams.length)) / 2);
+    const laneOffset = Math.floor((this.lanes - Math.max(1, s.teams.length)) / 2);
 
     // Positions and camera.
     const positions = s.riders.map((r, i) => this.displayPos(r, now, i));
@@ -259,28 +282,28 @@ export class TrackRenderer {
       ctx.closePath();
       ctx.fill();
     };
-    const gTop = BAND / 2 + 8;
+    const gTop = this.band / 2 + 8;
     for (let i = 0; i < cols.length - 1; i++) {
       const a = cols[i];
       const b = cols[i + 1];
       // Grass: a lighter verge behind the road, then a screen-space gradient that deepens towards the viewer.
       quad(a.x, a.y - gTop, b.y - gTop, gTop, C.grassFar);
-      quad(a.x, a.y + BAND / 2, b.y + BAND / 2, H * 2, this.grassNear);
+      quad(a.x, a.y + this.band / 2, b.y + this.band / 2, H * 2, this.grassNear);
       if (Math.floor(a.t) % 2 === 0) {
-        quad(a.x, a.y + BAND / 2, b.y + BAND / 2, H * 2, 'rgba(255,255,255,0.045)');
+        quad(a.x, a.y + this.band / 2, b.y + this.band / 2, H * 2, 'rgba(255,255,255,0.045)');
         quad(a.x, a.y - gTop, b.y - gTop, gTop, 'rgba(255,255,255,0.03)');
       }
       // Road surface: a smooth gradient, darker towards the camera.
-      const gy = (a.y + b.y) / 2 - BAND / 2;
-      const rg = ctx.createLinearGradient(0, gy, 0, gy + BAND);
+      const gy = (a.y + b.y) / 2 - this.band / 2;
+      const rg = ctx.createLinearGradient(0, gy, 0, gy + this.band);
       rg.addColorStop(0, a.ter === 'cobbles' ? C.cobbleTop : C.roadTop);
       rg.addColorStop(1, a.ter === 'cobbles' ? C.cobbleBottom : C.roadBottom);
-      quad(a.x, a.y - BAND / 2, b.y - BAND / 2, BAND, rg);
+      quad(a.x, a.y - this.band / 2, b.y - this.band / 2, this.band, rg);
       // Kerb in the terrain colour, with a soft shadow line under it.
-      quad(a.x, a.y - BAND / 2 - 2.2, b.y - BAND / 2 - 2.2, 2.2, edgeColor(a.ter));
-      quad(a.x, a.y + BAND / 2, b.y + BAND / 2, 2.2, edgeColor(a.ter));
-      quad(a.x, a.y + BAND / 2 + 2.2, b.y + BAND / 2 + 2.2, 2.6, 'rgba(0,0,0,0.16)');
-      quad(a.x, a.y - BAND / 2 - 0.8, b.y - BAND / 2 - 0.8, 0.8, 'rgba(0,0,0,0.22)');
+      quad(a.x, a.y - this.band / 2 - 2.2, b.y - this.band / 2 - 2.2, 2.2, edgeColor(a.ter));
+      quad(a.x, a.y + this.band / 2, b.y + this.band / 2, 2.2, edgeColor(a.ter));
+      quad(a.x, a.y + this.band / 2 + 2.2, b.y + this.band / 2 + 2.2, 2.6, 'rgba(0,0,0,0.16)');
+      quad(a.x, a.y - this.band / 2 - 0.8, b.y - this.band / 2 - 0.8, 0.8, 'rgba(0,0,0,0.22)');
     }
 
     // Surface detail in world space: asphalt grain and individual cobblestones.
@@ -291,7 +314,7 @@ export class TrackRenderer {
     const stoneTones = [new Path2D(), new Path2D(), new Path2D()];
     const STONE_W = 4.3;
     const STONE_H = 4.4;
-    const stoneRows = Math.floor(BAND / STONE_H);
+    const stoneRows = Math.floor(this.band / STONE_H);
     const stoneCols = Math.floor(TW / STONE_W);
     for (let t = Math.max(0, t0); t <= Math.min(t1, s.trackLength - 1); t++) {
       const ter = s.terrain[t];
@@ -301,7 +324,7 @@ export class TrackRenderer {
           for (let k = 0; k < stoneCols; k++) {
             const u = hash(t * 977 + r * 31 + k);
             const px = wx(t) + k * STONE_W + off;
-            const py = roadY(t + (k * STONE_W + off) / TW) - BAND / 2 + r * STONE_H;
+            const py = roadY(t + (k * STONE_W + off) / TW) - this.band / 2 + r * STONE_H;
             stoneTones[Math.floor(u * 3)].rect(px + 0.35, py + 0.35, STONE_W - 0.7, STONE_H - 0.7);
           }
         }
@@ -311,7 +334,7 @@ export class TrackRenderer {
           const v = hash(t * 53 + k * 7);
           const fx = t + u;
           const x = wx(fx);
-          const y = roadY(fx) - BAND / 2 + v * BAND;
+          const y = roadY(fx) - this.band / 2 + v * this.band;
           (k % 2 ? grainLight : grainDark).rect(x, y, 0.55, 0.55);
         }
       }
@@ -331,9 +354,9 @@ export class TrackRenderer {
     ctx.strokeStyle = 'rgba(255,255,255,0.07)';
     ctx.lineWidth = 0.5;
     ctx.setLineDash([3, 5]);
-    for (let l = 1; l < LANES; l++) {
+    for (let l = 1; l < this.lanes; l++) {
       ctx.beginPath();
-      cols.forEach((c, i) => (i ? ctx.lineTo(c.x, c.y - BAND / 2 + l * LANE_H) : ctx.moveTo(c.x, c.y - BAND / 2 + l * LANE_H)));
+      cols.forEach((c, i) => (i ? ctx.lineTo(c.x, c.y - this.band / 2 + l * LANE_H) : ctx.moveTo(c.x, c.y - this.band / 2 + l * LANE_H)));
       ctx.stroke();
     }
     ctx.setLineDash([]);
@@ -344,8 +367,8 @@ export class TrackRenderer {
       const x = wx(t);
       const y = roadY(t);
       ctx.beginPath();
-      ctx.moveTo(x, y - BAND / 2);
-      ctx.lineTo(x, y + BAND / 2);
+      ctx.moveTo(x, y - this.band / 2);
+      ctx.lineTo(x, y + this.band / 2);
       ctx.stroke();
     }
 
@@ -353,10 +376,10 @@ export class TrackRenderer {
     ctx.strokeStyle = C.barrier;
     ctx.lineWidth = 0.9;
     ctx.beginPath();
-    cols.forEach((c, i) => (i ? ctx.lineTo(c.x, c.y - BAND / 2 - 5) : ctx.moveTo(c.x, c.y - BAND / 2 - 5)));
+    cols.forEach((c, i) => (i ? ctx.lineTo(c.x, c.y - this.band / 2 - 5) : ctx.moveTo(c.x, c.y - this.band / 2 - 5)));
     ctx.stroke();
     ctx.beginPath();
-    cols.forEach((c, i) => (i ? ctx.lineTo(c.x, c.y + BAND / 2 + 6) : ctx.moveTo(c.x, c.y + BAND / 2 + 6)));
+    cols.forEach((c, i) => (i ? ctx.lineTo(c.x, c.y + this.band / 2 + 6) : ctx.moveTo(c.x, c.y + this.band / 2 + 6)));
     ctx.stroke();
     for (let t = t0; t <= t1; t++) {
       if (t < 0 || t >= s.trackLength) continue;
@@ -367,10 +390,10 @@ export class TrackRenderer {
         const hx = x0 + 5 + k * 9 + hash(t * 7 + k) * 4;
         const bob = Math.sin(now / 260 + hash(t * 13 + k) * 6.28) > 0.3 ? 0.8 : 0;
         const col = CROWD[Math.floor(hash(t * 31 + k) * CROWD.length)];
-        if (hash(t * 19 + k) > 0.25) this.person(hx, y - BAND / 2 - 8 - bob, col);
-        if (hash(t * 17 + k) > 0.7) this.person(hx + 2, y + BAND / 2 + 12 - bob, col);
+        if (hash(t * 19 + k) > 0.25) this.person(hx, y - this.band / 2 - 8 - bob, col);
+        if (hash(t * 17 + k) > 0.7) this.person(hx + 2, y + this.band / 2 + 12 - bob, col);
       }
-      if (ter !== 'flat' && t % 2 === 0) this.sign(x0 + 14, y - BAND / 2 - 19, edgeColor(ter));
+      if (ter !== 'flat' && t % 2 === 0) this.sign(x0 + 14, y - this.band / 2 - 19, edgeColor(ter));
     }
 
     // Start and finish banners.
@@ -397,7 +420,7 @@ export class TrackRenderer {
       const ti = s.teams.findIndex((t) => t.id === r.teamId);
       const col = colors[ti] ?? TEAM_COLORS[0];
       const sx = wx(pos) + ((i % 3) - 1) * 2;
-      const laneY = (ti + laneOffset) * LANE_H + LANE_H / 2 - BAND / 2;
+      const laneY = (ti + laneOffset) * LANE_H + LANE_H / 2 - this.band / 2;
       const sy = roadY(pos) + laneY + 3;
       const moving = resolving && progress < 1;
       const phase = now / (moving ? 70 : 240) + i * 1.7;
@@ -535,7 +558,7 @@ export class TrackRenderer {
       const x = wx(t);
       if (x < 6 || x > W - 6) continue;
       const behind = leadTile - t;
-      const y = roadY(t) + BAND / 2 + 10;
+      const y = roadY(t) + this.band / 2 + 10;
       const text = behind === 0 ? 'KOP' : `−${behind}`;
       const w = c.measureText(text).width + 5;
       c.fillStyle = behind === 0 ? '#ffc83d' : 'rgba(13, 15, 23, 0.62)';
@@ -619,8 +642,8 @@ export class TrackRenderer {
   private banner(x: number, y: number, label: string, checkered: boolean, tone: 'plain' | 'premie' | 'spent' = 'plain') {
     if (x < -50 || x > W + 50) return;
     const c = this.ctx;
-    const top = y - BAND / 2 - 20;
-    const bottom = y + BAND / 2;
+    const top = y - this.band / 2 - 20;
+    const bottom = y + this.band / 2;
     c.fillStyle = C.signPost;
     c.fillRect(x - 1, top, 2, bottom - top + 4);
     if (checkered) {
@@ -637,9 +660,9 @@ export class TrackRenderer {
         for (let j = 0; j < 3; j++) if ((i + j) % 2 === 0) c.fillRect(x - bw / 2 + i * 4, top - 4 + j * 3.7, 4, 3.7);
       }
       c.restore();
-      for (let ly = 0; ly < BAND; ly += 4) {
+      for (let ly = 0; ly < this.band; ly += 4) {
         c.fillStyle = (ly / 4) % 2 ? C.ink : '#ffffff';
-        c.fillRect(x - 1.5, y - BAND / 2 + ly, 3, 4);
+        c.fillRect(x - 1.5, y - this.band / 2 + ly, 3, 4);
       }
     } else {
       c.fillStyle = tone === 'spent' ? '#8b91ab' : tone === 'premie' ? '#ffc83d' : '#f3f4f8';

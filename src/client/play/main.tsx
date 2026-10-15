@@ -72,6 +72,7 @@ import {
   GEL_ENERGY,
   HELP_BONUS,
   HELP_RANGE,
+  MAX_TEAMS,
   PELOTON_MIN,
   PELOTON_REST,
   PREMIE_POINTS,
@@ -682,7 +683,7 @@ function Lobby({ view, president }: GameProps) {
                 − Bot
               </button>
               <span class="small">{state.teams.length} teams</span>
-              <button class="small-btn" onClick={() => president('addBot')} disabled={state.teams.length >= 6}>
+              <button class="small-btn" onClick={() => president('addBot')} disabled={state.teams.length >= MAX_TEAMS}>
                 + Bot
               </button>
             </div>

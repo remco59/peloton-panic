@@ -11,6 +11,8 @@ export const TEAM_COLORS = [
   { name: 'Oranje', hex: '#ff8a2b', dark: '#b45a0d', shape: 'diamond' },
   { name: 'Zilver', hex: '#e4e8f2', dark: '#8a93aa', shape: 'hexagon' },
   { name: 'Roze', hex: '#ff7eb8', dark: '#b84a80', shape: 'plus' },
+  { name: 'Bruin', hex: '#c9966b', dark: '#7d5535', shape: 'star' },
+  { name: 'Magenta', hex: '#e63fd0', dark: '#9a1f89', shape: 'pentagon' },
 ] as const;
 export type TeamShape = (typeof TEAM_COLORS)[number]['shape'];
 

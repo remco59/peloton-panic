@@ -660,7 +660,7 @@ export function Podium({ entries, confetti = true, compact = false }: { entries:
         })}
       </div>
       {rest.length > 0 && (
-        <div class="podrest">
+        <div class={`podrest ${rest.length > 3 ? 'many' : ''}`} style={{ '--rows': String(Math.ceil(rest.length / 2)) } as Record<string, string>}>
           {rest.map((e, i) => (
             <div class="prow" key={e.teamId} style={{ '--c': teamHex(e.color).hex } as Record<string, string>}>
               <span class="rk ty">{i + 4}</span>

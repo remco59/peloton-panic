@@ -37,6 +37,7 @@ import {
   HELP_BONUS,
   HELP_RANGE,
   MARKET_SIZE,
+  MAX_TEAMS,
   PELOTON_REST,
   PREMIE_POINTS,
   RIDERS_PER_TEAM,
@@ -46,7 +47,7 @@ import {
   STAGE_FACTOR,
   TRACK_LENGTH,
 } from './types';
-import { CARD_DEFS, COURSE_BY_ID, COURSES, EVENTS, EVENT_IDS, LEGACY_COURSE, stageInfo } from './content';
+import { CARD_DEFS, COURSE_BY_ID, TEAM_COLORS, COURSES, EVENTS, EVENT_IDS, LEGACY_COURSE, stageInfo } from './content';
 import type { Action, Card, Effort, GameState, RacePlay, ShopItem } from './types';
 
 function lobby(n: number, seed = 42): GameState {
@@ -140,9 +141,19 @@ describe('lobby en start', () => {
     expect(s.teams.every((t) => t.coins === START_COINS)).toBe(true);
   });
 
-  it('weigert starten met 1 team en een 7e team', () => {
+  it('weigert starten met 1 team en een team boven het maximum', () => {
     expect(() => reduce(lobby(1), { type: 'start' })).toThrow(RuleError);
-    expect(() => reduce(lobby(6), { type: 'join', name: 'laat' })).toThrow(RuleError);
+    expect(() => reduce(lobby(MAX_TEAMS), { type: 'join', name: 'laat' })).toThrow(RuleError);
+  });
+
+  it('laat tot 8 teams meedoen, elk met een eigen kleur en vorm', () => {
+    expect(MAX_TEAMS).toBe(8);
+    const s = lobby(MAX_TEAMS);
+    expect(s.teams).toHaveLength(8);
+    expect(new Set(s.teams.map((t) => t.color)).size).toBe(8);
+    expect(new Set(TEAM_COLORS.slice(0, MAX_TEAMS).map((c) => c.shape)).size).toBe(8);
+    expect(new Set(TEAM_COLORS.slice(0, MAX_TEAMS).map((c) => c.hex)).size).toBe(8);
+    expect(TEAM_COLORS.length).toBeGreaterThanOrEqual(MAX_TEAMS);
   });
 
   it('zet het commentaar standaard uit en laat de president het in de lobby aanzetten', () => {
@@ -712,6 +723,19 @@ describe('uitslag en seizoen', () => {
     expect(again.phase).toBe('lobby');
     expect(again.teams).toHaveLength(4);
     expect(again.teams.every((t) => t.points === 0 && t.hand.length === 0)).toBe(true);
+  });
+
+  it.each([6, 7, MAX_TEAMS])('speelt een heel seizoen met %i teams uit zonder dat de stapel leeg raakt', (n) => {
+    const rand = makeRand(21);
+    let s = started(n, 5);
+    expect(s.riders).toHaveLength(n * RIDERS_PER_TEAM);
+    for (let stage = 1; stage <= STAGES; stage++) {
+      s = playStage(s, rand);
+      expect(s.phase).toBe('results');
+      s = reduce(s, { type: 'nextStage' });
+    }
+    expect(s.phase).toBe('finished');
+    expect(s.season!.teams).toHaveLength(n);
   });
 
   it('de slotetappe telt dubbel (etappe 1 en 2 enkel)', () => {
