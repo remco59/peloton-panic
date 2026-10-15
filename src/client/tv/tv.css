@@ -92,9 +92,28 @@
   padding: 16px 18px;
   min-height: 118px;
 }
+.event .ev-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.event .ev-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: clamp(42px, 3.6vw, 64px);
+  height: clamp(42px, 3.6vw, 64px);
+  border-radius: 50%;
+  font-size: clamp(24px, 2.2vw, 38px);
+  background: radial-gradient(circle at 35% 30%, #2d3550, #161b2e);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.12);
+}
+.event.silly .ev-icon {
+  background: radial-gradient(circle at 35% 30%, #5a2a38, #2a1018);
+}
 .event .title {
   font-size: clamp(18px, 1.5vw, 26px);
-  margin-bottom: 6px;
 }
 .event p {
   margin: 4px 0;
@@ -119,7 +138,7 @@
 }
 .standings .row {
   display: grid;
-  grid-template-columns: 22px 12px 1fr auto auto;
+  grid-template-columns: 28px auto 1fr auto;
   gap: 10px;
   align-items: center;
   padding: 10px 0;
@@ -157,9 +176,42 @@
   color: var(--good);
 }
 .standings .best {
-  font-size: 20px;
+  font-size: 26px;
   min-width: 2ch;
   text-align: right;
+  color: var(--accent);
+}
+.standings .row.turn {
+  margin: 0 -8px;
+  padding-left: 8px;
+  padding-right: 8px;
+  border-radius: var(--r-md);
+  background: rgba(255, 200, 61, 0.1);
+  box-shadow: inset 0 0 0 2px var(--accent);
+  animation: turn-pulse 1.6s ease-in-out infinite;
+}
+@keyframes turn-pulse {
+  50% {
+    box-shadow: inset 0 0 0 2px rgba(255, 200, 61, 0.35);
+  }
+}
+.standings .riders {
+  align-items: center;
+  gap: 2px 14px;
+}
+.standings .ptsbar {
+  display: block;
+  height: 5px;
+  margin-top: 5px;
+  border-radius: 3px;
+  background: var(--bg);
+  overflow: hidden;
+}
+.standings .ptsbar i {
+  display: block;
+  height: 100%;
+  background: var(--c);
+  transition: width 0.6s;
 }
 .bot {
   color: var(--muted);
@@ -170,26 +222,19 @@
 .minimap {
   position: relative;
   width: 100%;
-  height: 40px;
-  padding: 4px 8px;
+  height: clamp(64px, 8.5vh, 96px);
+  padding: 10px 12px 6px;
   background: var(--panel);
   border-radius: var(--r-md);
 }
-.minimap svg {
-  display: block;
-  width: 100%;
+.minimap .elev {
   height: 100%;
+  margin: 0;
 }
-.minimap .mm-dot {
-  position: absolute;
-  width: 9px;
-  height: 9px;
-  margin: 4px 0 0 calc(8px - 4.5px);
-  border-radius: 50%;
-  box-shadow: 0 0 0 1.5px var(--bg);
-}
-.minimap .mm-dot.first {
-  box-shadow: 0 0 0 2px var(--accent);
+.minimap .erider {
+  width: clamp(18px, 1.5vw, 26px);
+  height: clamp(18px, 1.5vw, 26px);
+  margin-left: calc(clamp(18px, 1.5vw, 26px) / -2);
 }
 
 /* ---- Koers: renner voor renner ---- */
@@ -198,11 +243,48 @@
 }
 .ladder .lrow {
   display: grid;
-  grid-template-columns: 22px 10px minmax(0, 1fr) clamp(54px, 5vw, 96px) 3ch 4ch;
+  grid-template-columns: 22px var(--avs, 26px) minmax(0, 1fr) clamp(60px, 6vw, 120px) 38px 3ch 4ch;
   gap: 8px;
   align-items: center;
-  min-height: clamp(22px, 2.6vh, 30px);
+  min-height: clamp(26px, 3.1vh, 36px);
   font-size: clamp(13px, 1vw, 16px);
+  --avs: clamp(22px, 2.6vh, 32px);
+}
+.ladder.dense .lrow {
+  --avs: clamp(14px, calc((100vh - 620px) / var(--n, 12)), 22px);
+}
+.ladder.dense .lrow .batt .cell {
+  width: 28px;
+  height: 11px;
+  padding: 1.5px;
+}
+.ladder.dense .lrow .batt .bolt {
+  display: none;
+}
+.ladder.dense .dotp {
+  width: 15px;
+  height: 15px;
+  margin: -7.5px 0 0 -7.5px;
+}
+.ladder.dense .rk .crown {
+  width: 14px;
+}
+.ladder .lrow .av {
+  width: var(--avs);
+  height: var(--avs);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--c);
+}
+.ladder .lrow .av .ravatar {
+  width: 100%;
+  height: 100%;
+}
+.ladder .lrow .batt .cell {
+  width: 34px;
+  height: 14px;
+}
+.ladder .rk .crown {
+  display: block;
 }
 .ladder .lrow.first .nm {
   color: var(--accent);
@@ -234,14 +316,29 @@
   border-radius: 2px;
   background: var(--panel-2);
 }
+.ladder .bar {
+  height: 6px;
+}
+.ladder .fillp {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+  opacity: 0.55;
+}
 .ladder .dotp {
   position: absolute;
-  top: -3px;
-  width: 10px;
-  height: 10px;
-  margin-left: -5px;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
   border-radius: 50%;
-  box-shadow: 0 0 0 1.5px var(--panel);
+  box-shadow: 0 0 0 2px var(--c);
+}
+.ladder .dotp .ravatar {
+  width: 100%;
+  height: 100%;
 }
 .ladder .tl {
   text-align: right;
@@ -405,6 +502,9 @@
   padding: 12px 16px;
 }
 .lobby .tn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 700;
   font-size: clamp(16px, 1.3vw, 21px);
 }
@@ -444,6 +544,44 @@
   gap: 14px;
   flex-wrap: wrap;
   margin-bottom: 20px;
+}
+.podium.details .pod {
+  background: var(--panel-2);
+  padding: 10px 14px;
+}
+.podium.details .pod.p0 {
+  background: #2c2817;
+}
+.podium.details .pn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+}
+.finish .rs .rr {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0;
+}
+.finish .rs .rr b {
+  color: var(--accent);
+  min-width: 2.2ch;
+}
+.lantern {
+  margin: -6px 0 16px;
+  text-align: center;
+  color: var(--muted);
+}
+.lantern b {
+  color: #ff9f9f;
+}
+.award .aw-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  margin-bottom: 4px;
 }
 .pod {
   flex: 1 1 200px;
@@ -591,7 +729,6 @@
 }
 .bh .coins {
   margin-left: auto;
-  color: var(--accent);
 }
 .bh .rd {
   font-size: 10px;
@@ -602,6 +739,13 @@
   color: var(--good);
 }
 .br {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.br .brb {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -626,11 +770,14 @@
 }
 .sb {
   display: grid;
-  grid-template-columns: 30px 1fr 18px;
+  grid-template-columns: 46px 1fr 18px;
   align-items: center;
   gap: 6px;
   font-size: 11px;
   color: var(--muted);
+}
+.sb .sl {
+  white-space: nowrap;
 }
 .sb .track {
   height: 7px;
@@ -913,8 +1060,10 @@
 /* ---- Rekruteren ---------------------------------------------------------- */
 
 .board .br.empty {
+  align-items: center;
+  gap: 10px;
   min-height: 54px;
-  justify-content: center;
+  justify-content: flex-start;
   border: 1px dashed var(--line);
   border-radius: var(--r-sm);
   padding: 0 10px;
@@ -936,4 +1085,30 @@
   color: var(--bad);
   font-style: normal;
   font-weight: 700;
+}
+
+/* Podium in de uitslag: kleiner zodat uitslag, prijzen en uitleg op één scherm passen. */
+.finish .podium3 {
+  --ph: clamp(120px, 19vh, 200px);
+  margin: 0 0 10px;
+}
+.finish .step3 .onstep {
+  width: clamp(70px, 7vw, 120px);
+}
+.finish .step3.s1 .onstep {
+  width: clamp(84px, 8.4vw, 140px);
+}
+.finish .step3 .trophy {
+  top: -10%;
+}
+.finish {
+  padding: 22px 36px 26px;
+}
+
+.board .br.empty .slot {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 2px dashed var(--line);
 }

@@ -1,0 +1,562 @@
+/* Visuele bouwstenen: avatars, podium, batterij, radar, parcoursprofiel. Gedeeld door tv en telefoon. */
+
+.ravatar {
+  flex: none;
+  display: block;
+  border-radius: 50%;
+}
+.rfigure {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.45));
+}
+
+.sicon {
+  flex: none;
+  vertical-align: -2px;
+}
+
+/* Drie hoofden over elkaar. */
+.tstack {
+  --s: 30px;
+  display: inline-flex;
+  flex: none;
+  padding-right: calc(var(--s) * 0.25);
+}
+.tstack .ravatar {
+  width: var(--s);
+  height: var(--s);
+  margin-right: calc(var(--s) * -0.32);
+  box-shadow: 0 0 0 2px var(--panel);
+}
+
+/* ---- Batterij ---- */
+.batt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+  --bc: var(--good);
+}
+.batt.mid {
+  --bc: #ffc83d;
+}
+.batt.low {
+  --bc: var(--bad);
+}
+.batt .cell {
+  position: relative;
+  display: block;
+  width: 38px;
+  height: 16px;
+  padding: 2px;
+  border-radius: 4px;
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.28);
+  overflow: hidden;
+}
+.batt .cell::after {
+  content: '';
+  position: absolute;
+  right: -0px;
+  top: 4px;
+  width: 0;
+  height: 0;
+}
+.batt .lvl {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--bc);
+  background-image: repeating-linear-gradient(90deg, transparent 0 5px, rgba(0, 0, 0, 0.35) 5px 6px);
+  transition: width 0.4s;
+}
+.batt .bolt {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 11px;
+  height: 11px;
+  color: #fff;
+  mix-blend-mode: overlay;
+  opacity: 0.9;
+}
+.batt.low .cell {
+  animation: batt-low 1s ease-in-out infinite;
+}
+.batt b {
+  font-size: 12px;
+  color: var(--ink);
+}
+@keyframes batt-low {
+  50% {
+    box-shadow: inset 0 0 0 1.5px var(--bad);
+  }
+}
+
+/* ---- Type en eigenaardigheid ---- */
+.tbadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px 1px 3px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.tbadge i {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-style: normal;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.tbadge.t-sprinter i {
+  background: rgba(255, 200, 61, 0.3);
+}
+.tbadge.t-climber i {
+  background: rgba(255, 159, 67, 0.3);
+}
+.tbadge.t-rouleur i {
+  background: rgba(126, 200, 242, 0.3);
+}
+.tbadge.t-puncheur i {
+  background: rgba(229, 72, 77, 0.3);
+}
+.tbadge.t-domestique i {
+  background: rgba(61, 220, 132, 0.25);
+}
+.qtag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.qtag i {
+  font-style: normal;
+}
+
+/* ---- Radar ---- */
+.radar {
+  flex: none;
+  display: block;
+  overflow: visible;
+}
+
+/* ---- Munten en handkaarten ---- */
+.coins-vis,
+.handfan {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+}
+.coins-vis .stackc {
+  display: inline-flex;
+  position: relative;
+  width: 18px;
+  height: 18px;
+}
+.coins-vis .stackc i {
+  position: absolute;
+  left: calc(var(--i) * 3px);
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff3b8, var(--accent) 55%, #d99f00);
+  box-shadow: 0 0 0 1.5px rgba(120, 80, 0, 0.55);
+}
+.coins-vis b,
+.handfan b {
+  font-size: 13px;
+}
+.handfan .fan {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 22px;
+}
+.handfan .fan i {
+  position: absolute;
+  left: var(--x);
+  bottom: 0;
+  width: 13px;
+  height: 19px;
+  border-radius: 3px;
+  background: linear-gradient(150deg, #3b4378, #151936);
+  box-shadow: 0 0 0 1.2px var(--accent);
+  transform: rotate(var(--a));
+  transform-origin: 50% 100%;
+}
+
+/* ---- Medaille en kroon ---- */
+.medal {
+  flex: none;
+}
+.crown {
+  flex: none;
+  vertical-align: middle;
+}
+
+/* ---- Parcoursprofiel ---- */
+.elev {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  height: 56px;
+  margin-top: 4px;
+  border-radius: 10px;
+  background: linear-gradient(#1b2236, #0f1320);
+  overflow: visible;
+}
+.elev > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+}
+.elev .eflag {
+  position: absolute;
+  width: 0;
+  height: 0;
+  z-index: 1;
+}
+.elev .eflag i {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 2px;
+  height: 20px;
+  background: #fff;
+}
+.elev .eflag i::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 0;
+  width: 11px;
+  height: 8px;
+  background: var(--accent);
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+}
+.elev .efinish {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  border-radius: 0 10px 10px 0;
+  background: repeating-conic-gradient(#fff 0 25%, #1b1d2a 0 50%) 0 0 / 6px 6px;
+  opacity: 0.85;
+}
+.elev .erider {
+  position: absolute;
+  z-index: 2;
+  width: 20px;
+  height: 20px;
+  margin-left: -10px;
+  transition: left 0.9s ease-in-out, bottom 0.9s ease-in-out;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7));
+}
+.elev .erider .ravatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  box-shadow: none;
+}
+.elev .erider::after {
+  content: '';
+  position: absolute;
+  inset: auto 3px -3px 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--c);
+}
+.elev .erider.mine {
+  width: 26px;
+  height: 26px;
+  margin-left: -13px;
+  z-index: 3;
+}
+.elev .erider.kop::before {
+  content: '★';
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: var(--accent);
+  text-shadow: 0 0 3px #000;
+}
+.elev .erider.first {
+  z-index: 4;
+}
+
+/* ---- Podium ---- */
+.podium3 {
+  position: relative;
+  margin: 8px 0 18px;
+  --ph: clamp(150px, 25vh, 270px);
+}
+.podium3 .stage3 {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 6px;
+}
+.step3 {
+  flex: 1 1 0;
+  max-width: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.step3 .onstep {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: clamp(80px, 9vw, 150px);
+  margin-bottom: -4px;
+  z-index: 1;
+  animation: pod-rise 0.7s cubic-bezier(0.2, 0.9, 0.3, 1.2) backwards;
+  animation-delay: calc(0.9s - var(--k, 0s));
+}
+.step3.s1 .onstep {
+  width: clamp(96px, 11vw, 180px);
+  --k: 0s;
+  animation-delay: 1.5s;
+}
+.step3.s3 .onstep {
+  animation-delay: 0.5s;
+}
+.step3.s2 .onstep {
+  animation-delay: 1s;
+}
+.step3 .onstep .win {
+  animation: pod-bounce 1.2s ease-in-out 2.2s infinite;
+}
+.step3 .trophy {
+  position: absolute;
+  top: -14%;
+  right: -34%;
+  font-size: clamp(26px, 3vw, 46px);
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.5));
+  animation: pod-bounce 1.2s ease-in-out 2.4s infinite;
+}
+.step3 .figname {
+  margin-top: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  font-size: clamp(12px, 1vw, 15px);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.step3 .nofig {
+  font-size: 60px;
+  font-weight: 800;
+  color: var(--accent);
+}
+.step3 .block {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 8px 12px;
+  text-align: center;
+  border-radius: 12px 12px 0 0;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--c) 78%, #fff) 0%, var(--c) 12%, var(--cd) 100%);
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.45), inset 0 -20px 30px -20px rgba(0, 0, 0, 0.6);
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  transform-origin: 50% 100%;
+  animation: pod-grow 0.6s cubic-bezier(0.2, 0.8, 0.3, 1) backwards;
+}
+.step3.s1 .block {
+  height: var(--ph);
+  animation-delay: 1s;
+}
+.step3.s2 .block {
+  height: calc(var(--ph) * 0.86);
+  animation-delay: 0.6s;
+}
+.step3.s3 .block {
+  height: calc(var(--ph) * 0.74);
+  animation-delay: 0.2s;
+}
+.step3 .num {
+  font-size: clamp(30px, 3.6vw, 62px);
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.25);
+}
+.step3 .tn {
+  font-weight: 800;
+  font-size: clamp(15px, 1.4vw, 22px);
+}
+.step3 .tp {
+  font-size: clamp(15px, 1.4vw, 22px);
+}
+.step3 .tsub {
+  font-size: 12px;
+  opacity: 0.85;
+}
+.podium3.compact {
+  --ph: 128px;
+  margin: 0;
+}
+.podium3.compact .onstep {
+  width: 62px;
+}
+.podium3.compact .step3.s1 .onstep {
+  width: 76px;
+}
+.podium3.compact .num {
+  font-size: 30px;
+}
+.podium3.compact .figname {
+  display: none;
+}
+.podium3.compact .trophy {
+  font-size: 22px;
+}
+.podium3.compact .tn {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.podium3.compact .tp {
+  font-size: 12px;
+}
+.podium3.compact .block {
+  padding: 6px 4px 8px;
+}
+
+.podrest {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+.prow {
+  display: grid;
+  grid-template-columns: 2ch auto minmax(0, 1fr) minmax(40px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: var(--r-md);
+  background: var(--panel-2);
+  font-size: 14px;
+}
+.prow .rk {
+  color: var(--muted);
+}
+.prow .pbar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--bg);
+  overflow: hidden;
+}
+.prow .pbar i {
+  display: block;
+  height: 100%;
+  background: var(--c);
+}
+
+.confetti {
+  position: absolute;
+  inset: -20px 0 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 3;
+}
+.confetti i {
+  position: absolute;
+  top: -12px;
+  width: 8px;
+  height: 14px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: confetti var(--d) linear var(--w) infinite;
+}
+
+@keyframes pod-grow {
+  from {
+    transform: scaleY(0);
+  }
+}
+@keyframes pod-rise {
+  from {
+    opacity: 0;
+    transform: translateY(-60px) scale(0.8);
+  }
+}
+@keyframes pod-bounce {
+  50% {
+    transform: translateY(-8px);
+  }
+}
+@keyframes confetti {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(var(--x), 360px) rotate(var(--rot));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .step3 .onstep,
+  .step3 .block,
+  .step3 .win,
+  .step3 .trophy,
+  .confetti i,
+  .elev .erider {
+    animation: none;
+    transition: none;
+  }
+  .confetti {
+    display: none;
+  }
+}
+
+.coins-vis .stackc.zero i {
+  opacity: 0.35;
+}
+
+.podium3.compact {
+  margin-top: 30px;
+}
+.podium3.compact .confetti i {
+  width: 5px;
+  height: 9px;
+}
+
+.tjersey {
+  flex: none;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.45));
+  animation: jersey-pop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.4) backwards;
+}
+@keyframes jersey-pop {
+  from {
+    transform: scale(0) rotate(-20deg);
+  }
+}
+.podium3.compact .tsub {
+  display: none;
+}
