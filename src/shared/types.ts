@@ -6,7 +6,7 @@ export const RIDERS_PER_TEAM = 3;
 export const TRACK_LENGTH = 48;
 export const STAT_FACTOR = 1; // hoeveel een eigenschapspunt aan beweging oplevert
 export const STAGES = 3;
-export const START_COINS = 5;
+export const START_COINS = 10;
 export const MARKET_SIZE = 5;
 export const BLIND_COST = 2;
 export const TRAININGS_PER_RIDER = 2;
@@ -48,7 +48,8 @@ export const DOMINO_RANGE = 1; // renners binnen zoveel tegels kunnen meevallen
 export const DOMINO_CHANCE = 35; // procent (nat: +20)
 export const DOMINO_LOSS = 3; // tegels die een meegevallen renner verliest
 export const RECRUIT_PICKS = 3; // renners per team
-export const RECRUIT_MARKET_MAX = 8;
+export const SHOP_CONTRACTS = 6; // sponsorcontracten in de eigen winkel van elk team
+export const POINT_BONUS_STEP = 3; // een puntensponsor betaalt per zoveel etappepunten
 export const ENERGY_BASE = 3; // maximale energie = ENERGY_BASE + ENERGY_PER_UITHOUDING * uithouding
 export const ENERGY_PER_UITHOUDING = 2;
 export const ENERGY_MIN = 6;
@@ -65,6 +66,8 @@ export type PremieId = 'sprint' | 'berg';
 export type CardKind = 'training' | 'sponsor' | 'staff' | 'material' | 'car' | 'sabotage' | 'race';
 export type RaceItem = 'gel' | 'cola' | 'blok';
 export type SlotKind = keyof typeof SLOT_LIMITS;
+/** Sponsorcontracten: direct geld, geld bij succes, of spullen die de sponsor levert. */
+export type ContractKind = 'cash' | 'bonus' | 'supply';
 
 export type QuirkId =
   | 'croissant'
@@ -132,11 +135,10 @@ export interface Rider {
   hurt: boolean; // viel zwaar in deze etappe: begint de volgende etappe geblesseerd
 }
 
-/** Een renner op de rekruteringsmarkt. */
-export interface Candidate {
-  rider: Rider; // teamId is leeg zolang niemand hem heeft
-  price: number; // startmunten
-}
+/** Wat een team in zijn eigen winkel kan kopen: een renner (kost munten) of een sponsorcontract (kost niets, maar neemt een plek in). */
+export type ShopItem =
+  | { id: string; kind: 'rider'; price: number; rider: Rider }
+  | { id: string; kind: 'contract'; def: string };
 
 export interface TeamStats {
   roundsLed: number;
@@ -271,8 +273,9 @@ export interface DraftState {
   idx: number;
 }
 
-export interface RecruitState extends DraftState {
-  market: Candidate[];
+/** Elk team heeft zijn eigen winkel: niemand wacht op een ander. */
+export interface RecruitState {
+  shops: Record<string, ShopItem[]>;
 }
 
 export interface StageTeamResult {
@@ -282,7 +285,7 @@ export interface StageTeamResult {
   premiePoints: number;
   stagePoints: number; // riderPoints + premiePoints
   prizeCoins: number;
-  sponsorCoins: number;
+  sponsorCoins: number; // wat je sponsors deze etappe hebben betaald
   bonusCards: string[]; // def-ids
   totalPoints: number;
 }
@@ -386,7 +389,7 @@ export interface PublicState {
   marketCards: Card[];
   deckCount: number;
   draft: { order: string[]; idx: number; currentTeamId: string | null; total: number } | null;
-  recruit: { order: string[]; idx: number; currentTeamId: string | null; total: number; market: Candidate[] } | null;
+  recruit: { picks: number; contracts: number } | null; // wat je in de winkel mag kiezen; de winkel zelf is privé
   weather: Weather;
   report: ResolveReport | null;
   stageResult: StageResult | null;
@@ -402,7 +405,8 @@ export interface PlayerView {
   offersIn: OfferView[];
   offerOut: OfferView | null;
   sabotageOn: string[]; // wat iemand tegen jou inzet: pas bij de uitslag zichtbaar wie
-  pickPending: boolean; // jij bent aan de beurt in de draft of bij het rekruteren
+  pickPending: boolean; // jij bent aan de beurt in de draft
+  shop: ShopItem[]; // jouw eigen winkel tijdens het rekruteren
   kopmanId: string; // jouw kopman voor deze etappe
   stats: TeamStats;
 }
@@ -413,7 +417,7 @@ export type PickSource = { kind: 'market'; index: number } | { kind: 'deck' };
 
 export type Action =
   | { type: 'join'; name: string; isBot?: boolean }
-  | { type: 'recruit'; teamId: string; index: number }
+  | { type: 'recruit'; teamId: string; itemId: string }
   | { type: 'nameRiders'; teamId: string; names: string[] }
   | { type: 'setTutorial'; on: boolean }
   | { type: 'setCommentary'; on: boolean }

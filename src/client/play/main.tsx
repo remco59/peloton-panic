@@ -9,6 +9,7 @@ import {
   BRIEFING,
   CARD_DEFS,
   CARD_DEF_LIST,
+  CONTRACT_LABELS,
   EFFORTS,
   EVENTS,
   KIND_COLORS,
@@ -59,6 +60,7 @@ import {
   PELOTON_REST,
   PREMIE_POINTS,
   RECRUIT_PICKS,
+  START_COINS,
   TEAM_BONUS,
   TEAM_BONUS_MAX,
   SLOT_LIMITS,
@@ -74,6 +76,7 @@ import type {
   RaceItem,
   RacePlay,
   Rider,
+  ShopItem,
   SlotKind,
   Stat,
   Terrain,
@@ -582,10 +585,10 @@ function Lobby({ view, president }: GameProps) {
       <TutorialHint hint={hintFor(view, {})} />
       <div class="grow stack">
         <div class="frame recruit-note">
-          <div class="ty">JE EIGEN RENNERS</div>
+          <div class="ty">JE EIGEN WINKEL</div>
           <p class="dim">
-            Na de uitleg kiest iedereen om de beurt {RECRUIT_PICKS} renners uit een gedeelde pool: sprinters, klimmers,
-            rouleurs, puncheurs en knechten. Neo-profs zijn gratis, sterren kosten munten.
+            Na de uitleg opent iedereen zijn eigen winkel met € {START_COINS}. Kies {RECRUIT_PICKS} renners (neo-profs zijn
+            gratis, sterren kosten munten) en teken sponsors: die betalen meteen, betalen bij succes of leveren spullen.
           </p>
         </div>
       </div>
@@ -802,101 +805,172 @@ function ProfileLegend({ state }: { state: PublicState }) {
   );
 }
 
-// ---- Draft --------------------------------------------------------------------
+// ---- Rekruteren: je eigen winkel ----------------------------------------------
 
-// ---- Rekruteren ---------------------------------------------------------------
+type RiderItem = Extract<ShopItem, { kind: 'rider' }>;
+type ContractItem = Extract<ShopItem, { kind: 'contract' }>;
 
 function Recruit({ view, act }: ViewProps) {
   const { state, me, teamId } = view;
   const rc = state.recruit!;
   const team = state.teams.find((t) => t.id === teamId)!;
-  const mine = !!me?.pickPending;
-  const current = rc.currentTeamId ? state.teams.find((t) => t.id === rc.currentTeamId) : null;
+  const shop = me?.shop ?? [];
+  const riders = shop
+    .filter((x): x is RiderItem => x.kind === 'rider')
+    .sort((a, b) => b.price - a.price || a.rider.name.localeCompare(b.rider.name));
+  const contracts = shop
+    .filter((x): x is ContractItem => x.kind === 'contract')
+    .sort((a, b) => CARD_DEFS[a.def].contract!.localeCompare(CARD_DEFS[b.def].contract!));
   const have = state.riders.filter((r) => r.teamId === teamId);
-  const picksLeft = rc.order.slice(rc.idx).filter((id) => id === teamId).length;
-  // Op id, niet op plek: de markt verschuift zodra iemand anders kiest.
+  const signed = team.slots.sponsor;
+  const full = have.length >= rc.picks;
+  const sponsorsFull = signed.length >= rc.contracts;
+  const readyCount = state.teams.filter((t) => t.ready).length;
+  const [tab, setTab] = useState<'riders' | 'sponsors'>('riders');
+  // Op id, niet op plek: een gekocht ding verdwijnt uit de lijst.
   const [open, setOpen] = useState<string | null>(null);
-  const cand = open !== null ? rc.market.find((c) => c.rider.id === open) : undefined;
+  const item = open !== null ? shop.find((x) => x.id === open) : undefined;
   const noPerks = perksOf([]);
+  const buy = (id: string) => {
+    act({ type: 'recruit', itemId: id });
+    setOpen(null);
+  };
   return (
     <section class="screen">
-      <TutorialHint hint={hintFor(view, { myTurn: mine })} />
-      <div class={`turn frame ${mine ? 'mine' : ''}`}>
-        {mine ? (
-          <>
-            <div class="ty">JIJ BENT AAN DE BEURT</div>
-            <p>Tik op een renner om hem te contracteren. Je hebt € {team.coins}.</p>
-          </>
-        ) : (
-          <>
-            <div class="ty">{current ? `${current.name} KIEST` : 'KLAAR'}</div>
-            <p class="dim">
-              Jij hebt nog {picksLeft} keuze{picksLeft === 1 ? '' : 's'}. Je hebt € {team.coins}.
-            </p>
-          </>
-        )}
+      <TutorialHint hint={hintFor(view, {})} />
+      <div class="shop-bar frame">
+        <span>
+          <span class="small">Budget</span>
+          <b class="ty">€ {team.coins}</b>
+        </span>
+        <span>
+          <span class="small">Renners</span>
+          <b class="ty">
+            {have.length}/{rc.picks}
+          </b>
+        </span>
+        <span>
+          <span class="small">Sponsors</span>
+          <b class="ty">
+            {signed.length}/{rc.contracts}
+          </b>
+        </span>
       </div>
-      <div class="small">
-        Jouw ploeg ({have.length}/{RECRUIT_PICKS})
-        {have.length > 0 && ': ' + have.map((r) => `${firstName(r.name)} (${RIDER_TYPES[r.type].label})`).join(', ')}
+      {(have.length > 0 || signed.length > 0) && (
+        <div class="small shop-mine">
+          {[
+            ...have.map((r) => `${firstName(r.name)} (${RIDER_TYPES[r.type].label})`),
+            ...signed.map((d) => CARD_DEFS[d].name),
+          ].join(' · ')}
+        </div>
+      )}
+      <div class="tabs two">
+        <button class={`tab ty ${tab === 'riders' ? 'on' : ''}`} onClick={() => setTab('riders')}>
+          RENNERS<span class="badge">{riders.length}</span>
+        </button>
+        <button class={`tab ty ${tab === 'sponsors' ? 'on' : ''}`} onClick={() => setTab('sponsors')}>
+          SPONSORS<span class="badge">{contracts.length}</span>
+        </button>
       </div>
-      <div class="cands">
-        {rc.market.map((c) => {
-          const r = c.rider;
-          const poor = c.price > team.coins;
-          return (
-            <button class={`cand frame ${poor ? 'poor' : ''}`} key={r.id} onClick={() => setOpen(r.id)}>
-              <span class="cand-top">
-                <b>{r.name}</b>
-                <span class={`price ty ${c.price === 0 ? 'free' : ''}`}>{c.price === 0 ? 'GRATIS' : `€ ${c.price}`}</span>
-              </span>
-              <span class="dim s">
-                {RIDER_TYPES[r.type].label} · {QUIRKS[r.quirk].label}
-              </span>
-              <span class="cand-stats s">
-                {STATS.map((k) => (
-                  <span key={k} title={STAT_HELP[k]}>
-                    {STAT_LABELS[k].slice(0, 3)} <b>{r.base[k]}</b>
-                  </span>
-                ))}
-                <span>
-                  Energie <b>{maxEnergyFor(r, noPerks, false)}</b>
+      {tab === 'riders' ? (
+        <div class="cands">
+          {riders.map((c) => {
+            const r = c.rider;
+            const poor = c.price > team.coins || full;
+            return (
+              <button class={`cand frame ${poor ? 'poor' : ''}`} key={c.id} onClick={() => setOpen(c.id)}>
+                <span class="cand-top">
+                  <b>{r.name}</b>
+                  <span class={`price ty ${c.price === 0 ? 'free' : ''}`}>{c.price === 0 ? 'GRATIS' : `€ ${c.price}`}</span>
                 </span>
-              </span>
-            </button>
-          );
-        })}
+                <span class="dim s">
+                  {RIDER_TYPES[r.type].label} · {QUIRKS[r.quirk].label}
+                </span>
+                <span class="cand-stats s">
+                  {STATS.map((k) => (
+                    <span key={k} title={STAT_HELP[k]}>
+                      {STAT_LABELS[k].slice(0, 3)} <b>{r.base[k]}</b>
+                    </span>
+                  ))}
+                  <span>
+                    Energie <b>{maxEnergyFor(r, noPerks, false)}</b>
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div class="cands">
+          <p class="dim s">
+            Sponsors kosten niets, maar je tekent er maximaal {rc.contracts}. Sommige betalen meteen, sommige alleen als je presteert,
+            en sommige leveren spullen.
+          </p>
+          <div class="cards">
+            {contracts.map((c, i) => {
+              const kind = CARD_DEFS[c.def].contract!;
+              return (
+                <div class="ct" key={c.id}>
+                  <CardTile def={c.def} index={i} dim={sponsorsFull} onClick={() => setOpen(c.id)} />
+                  <span class={`ct-tag ${kind}`}>{CONTRACT_LABELS[kind].label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      <div class="dock">
+        {team.ready && <p class="dim center s">Je staat op klaar. Tik op wijzig om nog iets te kopen.</p>}
+        <button
+          class={`big ty ${team.ready ? '' : 'primary'}`}
+          disabled={!team.ready && have.length < rc.picks}
+          onClick={() => act(team.ready ? { type: 'unready' } : { type: 'ready' })}
+        >
+          {team.ready
+            ? `KLAAR (${readyCount}/${state.teams.length}) · WIJZIG`
+            : have.length < rc.picks
+              ? `KIES NOG ${rc.picks - have.length} RENNER${rc.picks - have.length === 1 ? '' : 'S'}`
+              : `KLAAR (${readyCount}/${state.teams.length})`}
+        </button>
       </div>
-      {cand && (
-        <Sheet title={cand.rider.name} onClose={() => setOpen(null)}>
+      {item?.kind === 'rider' && (
+        <Sheet title={item.rider.name} onClose={() => setOpen(null)}>
           <div class="stack tight">
             <div>
-              <div class="small">{RIDER_TYPES[cand.rider.type].label}</div>
-              <div>{RIDER_TYPES[cand.rider.type].blurb}</div>
+              <div class="small">{RIDER_TYPES[item.rider.type].label}</div>
+              <div>{RIDER_TYPES[item.rider.type].blurb}</div>
             </div>
             <div>
-              <div class="small">{QUIRKS[cand.rider.quirk].label}</div>
-              <div>{QUIRKS[cand.rider.quirk].blurb}</div>
+              <div class="small">{QUIRKS[item.rider.quirk].label}</div>
+              <div>{QUIRKS[item.rider.quirk].blurb}</div>
             </div>
-            <Bars rider={cand.rider} tolerance={0} />
-            <div class="dim s">Energie in de race: {maxEnergyFor(cand.rider, noPerks, false)}</div>
-            {mine ? (
-              <button
-                class="big primary ty"
-                disabled={cand.price > team.coins}
-                onClick={() => {
-                  const index = rc.market.findIndex((c) => c.rider.id === cand.rider.id);
-                  if (index >= 0) act({ type: 'recruit', index });
-                  setOpen(null);
-                }}
-              >
-                {cand.price === 0 ? 'CONTRACTEER (GRATIS)' : `CONTRACTEER VOOR € ${cand.price}`}
-              </button>
-            ) : (
-              <p class="dim s">Wacht op je beurt om te contracteren.</p>
-            )}
-            {mine && cand.price > team.coins && <p class="bad s">Je hebt hier te weinig munten voor.</p>}
+            <Bars rider={item.rider} tolerance={0} />
+            <div class="dim s">Energie in de race: {maxEnergyFor(item.rider, noPerks, false)}</div>
+            <button
+              class="big primary ty"
+              disabled={team.ready || full || item.price > team.coins}
+              onClick={() => buy(item.id)}
+            >
+              {item.price === 0 ? 'CONTRACTEER (GRATIS)' : `CONTRACTEER VOOR € ${item.price}`}
+            </button>
+            {team.ready && <p class="dim s">Haal eerst je klaar weg om nog te winkelen.</p>}
+            {!team.ready && full && <p class="dim s">Je hebt al {rc.picks} renners.</p>}
+            {!team.ready && !full && item.price > team.coins && <p class="bad s">Je hebt hier te weinig munten voor.</p>}
           </div>
+        </Sheet>
+      )}
+      {item?.kind === 'contract' && (
+        <Sheet title="Sponsorcontract" onClose={() => setOpen(null)}>
+          <CardRow def={item.def}>
+            <p class="dim s">
+              <b>{CONTRACT_LABELS[CARD_DEFS[item.def].contract!].label}.</b> {CONTRACT_LABELS[CARD_DEFS[item.def].contract!].blurb}
+            </p>
+            <button class="small-btn primary" disabled={team.ready || sponsorsFull} onClick={() => buy(item.id)}>
+              {CARD_DEFS[item.def].signing ? `Teken en ontvang € ${CARD_DEFS[item.def].signing}` : 'Teken contract'}
+            </button>
+            {team.ready && <p class="dim s">Haal eerst je klaar weg om nog te winkelen.</p>}
+            {!team.ready && sponsorsFull && <p class="dim s">Je hebt al {rc.contracts} sponsors op je shirt.</p>}
+          </CardRow>
         </Sheet>
       )}
     </section>

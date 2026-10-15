@@ -24,6 +24,7 @@ function capture(name: string, url: string, w: number, h: number, scale: number,
       CHROME,
       [
         '--headless=new',
+        '--no-sandbox',
         `--user-data-dir=/tmp/pp-shot-${name}-${Date.now()}`,
         '--no-first-run',
         '--hide-scrollbars',
@@ -139,7 +140,7 @@ async function main() {
       if (d.kind !== 'sabotage') {
         const slot = mine.slots[d.kind as 'sponsor' | 'staff' | 'material' | 'car'];
         const limit = d.kind === 'car' ? 1 : 2;
-        if (slot.length < limit) {
+        if (slot && slot.length < limit) {
           me.act({ type: 'install', cardId: c.id });
           return true;
         }
@@ -186,20 +187,24 @@ async function main() {
       });
       return;
     }
-    if (s.phase === 'recruit' && c.me.pickPending) {
-      // Kies de eerste betaalbare renner, en neem bij de eerste keuze een screenshot.
-      const coins = s.teams.find((t) => t.id === c.teamId)!.coins;
-      const index = Math.max(0, s.recruit!.market.findIndex((m) => m.price <= coins && m.price > 0));
+    if (s.phase === 'recruit') {
+      // Winkel leeg: eerst een screenshot van de winkel, dan de goedkoopste drie renners en klaar.
+      const buy = () => {
+        const riders = c.me!.shop.filter((x) => x.kind === 'rider').sort((x, y) => (x as any).price - (y as any).price);
+        for (const r of riders.slice(0, 3)) c.act({ type: 'recruit', itemId: r.id });
+        c.act({ type: 'ready' });
+      };
       if (!done.has('shot-recruit')) {
         done.add('shot-recruit');
         hold = true;
         void Promise.all([shotTv('tv-1c-rekruteren'), shotPhone('phone-1c-rekruteren')]).then(() => {
           hold = false;
-          c.act({ type: 'recruit', index });
+          done.add('recruit-buy');
+          buy();
         });
         return;
       }
-      once(`recruit-${s.recruit!.idx}`, () => c.act({ type: 'recruit', index }));
+      once('recruit-buy', buy);
       return;
     }
     if (s.phase === 'naming') {

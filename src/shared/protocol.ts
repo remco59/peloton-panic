@@ -3,7 +3,7 @@ import type { Effort, PickSource, PlayerView, PublicState, RacePlay } from './ty
 
 /** Acties die een telefoon mag vragen. De server vult het team-id in vanuit de verbinding. */
 export type PlayerAction =
-  | { type: 'recruit'; index: number }
+  | { type: 'recruit'; itemId: string }
   | { type: 'nameRiders'; names: string[] }
   | { type: 'draftPick'; source: PickSource }
   | { type: 'draftSkip' }

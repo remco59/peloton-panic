@@ -912,52 +912,15 @@
 
 /* ---- Rekruteren ---------------------------------------------------------- */
 
-.recruit-teams {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+.board .br.empty {
+  min-height: 54px;
+  justify-content: center;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-sm);
+  padding: 0 10px;
 }
-.recruit-teams .rt {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px 12px;
-  border-left: 5px solid;
-  background: var(--panel-2);
-  border-radius: var(--r-md);
-  font-size: clamp(12px, 1vw, 16px);
-  min-width: 150px;
-}
-.recruit-teams .rt i {
-  font-style: normal;
-  opacity: 0.8;
-}
-.cands-tv {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 12px;
-}
-.cand-tv {
-  background: var(--panel-2);
-  border-radius: var(--r-md);
-  padding: 10px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  border-top: 4px solid var(--line);
-}
-.cand-tv.free {
-  border-top-color: #5eea8d;
-}
-.cand-tv .ct-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 10px;
-}
-.cand-tv .price {
-  color: var(--accent);
-  font-size: 12px;
+.board .asset.empty {
+  opacity: 0.5;
 }
 .event .weather {
   margin: 6px 0 0;

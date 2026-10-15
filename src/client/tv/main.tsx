@@ -186,7 +186,7 @@ function Header({ snap, clock, online }: { snap: Snapshot; clock: () => number; 
   const label: Record<string, string> = {
     lobby: 'Lobby',
     briefing: 'Eerst de uitleg',
-    recruit: 'Rekruteren: kies je renners',
+    recruit: 'Winkel: renners en sponsors',
     naming: 'Geef je renners een naam',
     draft: 'Draft: kies je kaarten',
     team: 'Voorbereiding',
@@ -391,7 +391,7 @@ function Standings({ snap }: { snap: Snapshot }) {
         const col = colorOf(t);
         let waiting = '';
         if (state.phase === 'race') waiting = t.locked ? 'KLAAR' : 'KIEST';
-        else if (state.phase === 'team') waiting = t.ready ? 'KLAAR' : 'BEZIG';
+        else if (state.phase === 'team' || state.phase === 'recruit') waiting = t.ready ? 'KLAAR' : 'BEZIG';
         else if (state.phase === 'draft')
           waiting = state.draft?.currentTeamId === t.id ? 'AAN DE BEURT' : '';
         return (
@@ -591,67 +591,68 @@ function NamingPanel({ snap }: { snap: Snapshot }) {
 function RecruitPanel({ snap }: { snap: Snapshot }) {
   const { state } = snap;
   const rc = state.recruit!;
-  const current = rc.currentTeamId ? teamById(state, rc.currentTeamId) : null;
+  const done = state.teams.filter((t) => t.ready).length;
   return (
     <div class="panel frame">
       <div class="ph-head">
         <div>
-          <div class="kicker ty">REKRUTEREN: KIES JE RENNERS</div>
+          <div class="kicker ty">DE WINKEL: RENNERS EN SPONSORS</div>
           <div class="big-line ty">
-            {current ? (
-              <>
-                <span class="chip" style={{ background: colorOf(current).hex }} /> {current.name} is aan de beurt
-              </>
-            ) : (
-              'De ploegen zijn compleet'
-            )}
+            {done}/{state.teams.length} teams klaar. Iedereen winkelt tegelijk, in zijn eigen winkel.
           </div>
-        </div>
-        <div class="order">
-          {rc.order.map((id, i) => {
-            const t = teamById(state, id);
-            return (
-              <span
-                key={i}
-                class={`ord ${i === rc.idx ? 'now' : i < rc.idx ? 'done' : ''}`}
-                style={{ background: colorOf(t).hex }}
-                title={t.name}
-              >
-                {t.name.slice(0, 1).toUpperCase()}
-              </span>
-            );
-          })}
         </div>
       </div>
       <TutorialCard state={state} inline />
-      <div class="recruit-teams">
-        {state.teams.map((t) => (
-          <span class="rt" key={t.id} style={{ borderColor: colorOf(t).hex }}>
-            <b>{t.name}</b> € {t.coins}
-            {ridersOf(state, t.id).map((r) => (
-              <i key={r.id}>
-                {r.name.split(' ')[0]} · {RIDER_TYPES[r.type].label}
-              </i>
-            ))}
-          </span>
-        ))}
-      </div>
-      <div class="kicker ty">DE POOL: ELKE RENNER KAN MAAR ÉÉN KEER WORDEN GEKOZEN</div>
-      <div class="cands-tv">
-        {rc.market.map((c) => (
-          <div class={`cand-tv ${c.price === 0 ? 'free' : ''}`} key={c.rider.id}>
-            <div class="ct-top">
-              <b>{c.rider.name}</b>
-              <span class="price ty">{c.price === 0 ? 'GRATIS' : `€ ${c.price}`}</span>
+      <div class="boards">
+        {state.teams.map((t) => {
+          const col = colorOf(t);
+          const riders = ridersOf(state, t.id);
+          return (
+            <div class={`board ${t.ready ? 'ready' : ''}`} key={t.id} style={{ borderColor: col.hex }}>
+              <div class="bh">
+                <span class="chip" style={{ background: col.hex }} />
+                <b>{t.name}</b>
+                {t.isBot && <span class="bot"> bot</span>}
+                <span class="coins ty">€ {t.coins}</span>
+                <span class={`rd ty ${t.ready ? 'ok' : ''}`}>{t.ready ? 'KLAAR' : 'BEZIG'}</span>
+              </div>
+              {Array.from({ length: rc.picks }, (_, i) => {
+                const r = riders[i];
+                return r ? (
+                  <div class="br" key={r.id}>
+                    <div class="rn">
+                      {r.name} <i>{RIDER_TYPES[r.type].label}</i>
+                    </div>
+                    <StatBars rider={r} tolerance={0} />
+                  </div>
+                ) : (
+                  <div class="br empty" key={i}>
+                    <div class="rn dim">Nog geen renner</div>
+                  </div>
+                );
+              })}
+              <div class="assets">
+                {Array.from({ length: rc.contracts }, (_, i) => {
+                  const def = t.slots.sponsor[i];
+                  return def ? (
+                    <span class="asset" key={i} style={{ '--k': KIND_COLORS[CARD_DEFS[def].kind] } as Record<string, string>}>
+                      {CARD_DEFS[def].name}
+                    </span>
+                  ) : (
+                    <span class="asset empty" key={i}>
+                      sponsor gezocht
+                    </span>
+                  );
+                })}
+              </div>
             </div>
-            <div class="dim">
-              {RIDER_TYPES[c.rider.type].label} · {QUIRKS[c.rider.quirk].label}
-            </div>
-            <StatBars rider={c.rider} tolerance={0} />
-          </div>
-        ))}
+          );
+        })}
       </div>
-      <p class="hint">Je kiest er drie, om de beurt. Neo-profs zijn gratis, sterren kosten munten die je ook voor kaarten nodig hebt.</p>
+      <p class="hint">
+        Drie renners en maximaal twee sponsors per team. Sponsors betalen meteen, betalen bij succes of leveren spullen. Bij tegenstanders
+        zie je pas wat ze tekenen als ze het doen.
+      </p>
     </div>
   );
 }

@@ -7,7 +7,7 @@ import { CARD_DEFS } from '../src/shared/content';
 import {
   botDraft,
   botEfforts,
-  botRecruit,
+  botShopStep,
   botRacePlan,
   botStep,
   canHelp,
@@ -197,8 +197,13 @@ function playSeason(seed: number, order: Policy[], st: Stats): void {
         s = reduce(s, { type: 'briefDone' });
         break;
       case 'recruit': {
-        const teamId = s.recruit!.order[s.recruit!.idx];
-        s = reduce(s, { type: 'recruit', teamId, index: botRecruit(s, teamId, rand) });
+        for (const t of s.teams) {
+          let a = botShopStep(s, t.id, rand);
+          while (a) {
+            s = reduce(s, a);
+            a = s.phase === 'recruit' ? botShopStep(s, t.id, rand) : null;
+          }
+        }
         break;
       }
       case 'naming':

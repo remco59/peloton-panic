@@ -1,6 +1,6 @@
 // Alle spelinhoud (Nederlands): kaarten, renners, gebeurtenissen, commentatoren.
 
-import type { CardKind, Effort, EventId, PremieId, QuirkId, RaceItem, RiderType, Stat, Stats, Terrain, Weather } from './types';
+import type { CardKind, ContractKind, Effort, EventId, PremieId, QuirkId, RaceItem, RiderType, Stat, Stats, Terrain, Weather } from './types';
 
 export const TEAM_COLORS = [
   { name: 'Rood', hex: '#e5484d', dark: '#9c2a2e' },
@@ -56,12 +56,12 @@ export const RIDER_TYPES: Record<RiderType, { label: string; blurb: string; base
 /** Welke types een ploeg als eerste kan rekruteren, in volgorde van voorkomen. */
 export const RIDER_TYPE_LIST: RiderType[] = ['sprinter', 'climber', 'rouleur', 'puncheur', 'domestique'];
 
-/** Talent bepaalt prijs en sterkte van een kandidaat op de rekruteringsmarkt. */
+/** Talent bepaalt prijs en sterkte van een renner in de winkel. `count` is hoeveel er in elke winkel liggen. */
 export const TALENT_TIERS = [
-  { id: 'neo', label: 'Neo-prof', price: 0, main: -1, extra: 0, weight: 2 },
-  { id: 'vast', label: 'Vaste waarde', price: 1, main: 0, extra: 0, weight: 5 },
-  { id: 'talent', label: 'Talent', price: 2, main: 1, extra: 0, weight: 2 },
-  { id: 'ster', label: 'Ster', price: 3, main: 1, extra: 1, weight: 1 },
+  { id: 'neo', label: 'Neo-prof', price: 0, main: -1, extra: 0, count: 3 },
+  { id: 'vast', label: 'Vaste waarde', price: 2, main: 0, extra: 0, count: 3 },
+  { id: 'talent', label: 'Talent', price: 3, main: 1, extra: 0, count: 2 },
+  { id: 'ster', label: 'Ster', price: 5, main: 1, extra: 1, count: 1 },
 ] as const;
 
 export type WeatherInfo = { label: string; icon: string; blurb: string };
@@ -114,6 +114,10 @@ export const QUIRKS: Record<QuirkId, { label: string; blurb: string }> = {
 export interface Perk {
   income?: number; // sponsor: munten per etappe
   podiumBonus?: number; // sponsor: extra munten bij een renner in de top 3
+  winBonus?: number; // sponsor: extra munten als je de etappe wint (de meeste punten)
+  pointBonus?: number; // sponsor: munten per POINT_BONUS_STEP etappepunten
+  gels?: number; // leverancier: extra gels aan het begin van elke etappe
+  colas?: number; // leverancier: extra cola's aan het begin van elke etappe
   startEnergy?: number;
   restBonus?: number; // extra herstel bij Rustig
   allesDiscount?: number; // Alles geven kost zoveel minder
@@ -140,7 +144,15 @@ export interface CardDef {
   perk?: Perk;
   sabotage?: 'spijkers' | 'bidon';
   race?: RaceItem; // racekaart: wordt in de race ingezet, één keer
+  contract?: ContractKind; // sponsorcontract: ligt alleen in de winkel, niet in de stapel
+  signing?: number; // contract: munten die de sponsor betaalt bij het tekenen
 }
+
+export const CONTRACT_LABELS: Record<ContractKind, { label: string; blurb: string }> = {
+  cash: { label: 'Direct geld', blurb: 'Betaalt meteen uit, ook als het tegenzit.' },
+  bonus: { label: 'Bonus bij succes', blurb: 'Betaalt meer naarmate je beter presteert.' },
+  supply: { label: 'Leverancier', blurb: 'Levert gratis spullen: gels, staf, een wagen.' },
+};
 
 export const KIND_LABELS: Record<CardKind, string> = {
   training: 'Training',
@@ -172,10 +184,18 @@ const defs: CardDef[] = [
   { id: 'kamp', kind: 'training', name: 'Trainingskamp', text: 'Alles +1. Vermoeidheid +2.', price: 3, count: 2, stats: { kracht: 1, klim: 1, sprint: 1, uithouding: 1 }, fatigue: 2 },
   { id: 'rustdag', kind: 'training', name: 'Rustdag', text: 'Vermoeidheid -2. Dit telt niet als training.', price: 1, count: 3, fatigue: -2 },
 
-  // Sponsors: leveren munten per etappe.
-  { id: 'bakker', kind: 'sponsor', name: 'Bakkerij De Gouden Korst', text: '+2 munten per etappe.', price: 2, count: 2, perk: { income: 2 } },
-  { id: 'bank', kind: 'sponsor', name: 'Regiobank', text: '+3 munten per etappe.', price: 3, count: 2, perk: { income: 3 } },
-  { id: 'drankje', kind: 'sponsor', name: 'Energiedrank XL', text: '+2 munten per etappe, +3 extra bij een podiumplek.', price: 3, count: 1, perk: { income: 2, podiumBonus: 3 } },
+  // Sponsorcontracten: ze liggen alleen in de eigen winkel van elk team, niet in de stapel.
+  // Elk team tekent er maximaal SLOT_LIMITS.sponsor. Tekenen kost niets: de keuze is welke je neemt.
+  { id: 'aannemer', kind: 'sponsor', contract: 'cash', name: 'Aannemer Van Dijk', text: 'Betaalt € 5 bij het tekenen. Daarna hoor je niets meer van hem.', price: 0, count: 0, signing: 5 },
+  { id: 'bakker', kind: 'sponsor', contract: 'cash', name: 'Bakkerij De Gouden Korst', text: '€ 3 bij het tekenen en € 1 per etappe, plus een croissant op de bus.', price: 0, count: 0, signing: 3, perk: { income: 1 } },
+  { id: 'bank', kind: 'sponsor', contract: 'bonus', name: 'Regiobank', text: '€ 1 per etappe, en € 3 extra als een van je renners op het podium eindigt.', price: 0, count: 0, perk: { income: 1, podiumBonus: 3 } },
+  { id: 'drankje', kind: 'sponsor', contract: 'bonus', name: 'Energiedrank XL', text: '€ 4 voor elke etappe die jij wint (de meeste punten), en € 2 voor elk podium.', price: 0, count: 0, perk: { winBonus: 4, podiumBonus: 2 } },
+  { id: 'omroep', kind: 'sponsor', contract: 'bonus', name: 'Regionale Omroep', text: '€ 1 per 3 etappepunten. Hoe harder jullie rijden, hoe meer ze zenden.', price: 0, count: 0, perk: { pointBonus: 1 } },
+  { id: 'gelfabriek', kind: 'sponsor', contract: 'supply', name: 'Gelfabriek Plakkie', text: 'Levert elke etappe 2 extra energiegels. Plakkerig, maar het werkt.', price: 0, count: 0, perk: { gels: 2 } },
+  { id: 'colafabriek', kind: 'sponsor', contract: 'supply', name: 'Colafabriek Prik', text: 'Levert elke etappe 1 spurtcola en 1 energiegel.', price: 0, count: 0, perk: { colas: 1, gels: 1 } },
+  { id: 'autodealer', kind: 'sponsor', contract: 'supply', name: 'Autodealer Van der Wiel', text: 'Levert een volgauto met geheime extra\'s: de wagen geeft +2 energie en je renners starten met +1 energie.', price: 0, count: 0, perk: { service: 1, startEnergy: 1 } },
+  { id: 'fietsenmaker', kind: 'sponsor', contract: 'supply', name: 'Fietsenmaker Kettinkie', text: 'Levert een reservefiets en een monteur: één pech of val per etappe is gedekt, en pech kost 1 tegel minder.', price: 0, count: 0, perk: { shield: 1, pechReduction: 1 } },
+  { id: 'fysiopraktijk', kind: 'sponsor', contract: 'supply', name: 'Fysiopraktijk Soepel', text: 'Levert een fysio en een soigneur: vermoeidheid zakt sneller, overtraining begint later en Rustig geeft +1 energie extra.', price: 0, count: 0, perk: { fatigueRecover: 1, overtrainTolerance: 1, restBonus: 1 } },
 
   // Staf.
   { id: 'mecanicien', kind: 'staff', name: 'Mecanicien', text: 'Een lekke band of val kost 1 tegel minder.', price: 3, count: 2, perk: { pechReduction: 1 } },
@@ -205,7 +225,10 @@ const defs: CardDef[] = [
 ];
 
 export const CARD_DEFS: Record<string, CardDef> = Object.fromEntries(defs.map((d) => [d.id, d]));
-export const CARD_DEF_LIST: CardDef[] = defs;
+/** Wat in de stapel en de markt kan zitten. */
+export const CARD_DEF_LIST: CardDef[] = defs.filter((d) => !d.contract);
+/** Sponsorcontracten: alleen in de winkel. */
+export const CONTRACT_LIST: CardDef[] = defs.filter((d) => !!d.contract);
 
 // ---- Etappes ---------------------------------------------------------------
 
@@ -230,21 +253,21 @@ export const BRIEFING: BriefPage[] = [
     title: 'Het doel',
     lead: 'Jullie managen elk een wielerploeg van drie renners. Wie na drie etappes de meeste punten heeft, wint.',
     points: [
-      { head: 'Rekruteren', text: 'Eerst kiest iedereen om de beurt drie renners uit dezelfde pool. Sterren kosten munten.' },
+      { head: 'Je eigen winkel', text: 'Eerst winkelt iedereen tegelijk in zijn eigen winkel, met € 10: drie renners en maximaal twee sponsors.' },
       { head: 'Drie etappes', text: 'Elke etappe heeft een eigen parcours en eigen weer: vlak, bergen, droog of nat.' },
       { head: 'Punten', text: 'Je scoort met de eindstand van je renners en met premies onderweg.' },
       { head: 'Slotetappe', text: 'De laatste etappe telt dubbel, dus niemand is kansloos.' },
     ],
-    say: { speaker: 'johan', text: 'Jullie managen elk een ploeg van drie renners. Na drie etappes wint het team met de meeste punten.' },
+    say: { speaker: 'johan', text: 'Jullie managen elk een ploeg van drie renners. Na drie etappes wint het team met de meeste punten. Eerst winkelt iedereen in zijn eigen winkel.' },
   },
   {
     title: 'Een etappe in vier stappen',
     lead: 'Elke etappe doorloop je dezelfde vier stappen. Op je telefoon staat steeds wat nu kan.',
     points: [
-      { head: '1. Draft', text: 'Kies om de beurt kaarten uit de markt: training, staf, materiaal, sponsors.' },
+      { head: '1. Draft', text: 'Kies om de beurt kaarten uit de markt: training, staf, materiaal, koerskaarten.' },
       { head: '2. Voorbereiding', text: 'Train je renners, leg spullen op je bord, ruil en kies je kopman.' },
       { head: '3. Race', text: 'Elke ronde kies je per renner een tempo. Dan rijdt het peloton.' },
-      { head: '4. Uitslag', text: 'Punten, munten en nieuwe kaarten. De laagste in het klassement krijgt extra hulp.' },
+      { head: '4. Uitslag', text: 'Punten, munten (ook van je sponsors) en nieuwe kaarten. De laagste in het klassement krijgt extra hulp.' },
     ],
     say: { speaker: 'marieke', text: 'Elke etappe heeft vier stappen: draft, voorbereiding, race en uitslag. Wat je in de voorbereiding doet, bepaalt hoe de race loopt.' },
   },

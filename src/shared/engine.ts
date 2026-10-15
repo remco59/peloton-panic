@@ -8,6 +8,7 @@ import {
   BRIEFING,
   CARD_DEFS,
   CARD_DEF_LIST,
+  CONTRACT_LIST,
   EFFORTS,
   EVENTS,
   EVENT_IDS,
@@ -18,7 +19,7 @@ import {
   TALENT_TIERS,
   TEAM_COLORS,
 } from './content';
-import type { Perk } from './content';
+import type { CardDef, Perk } from './content';
 import { pick, randInt, shuffle } from './rng';
 import {
   ALONE_COST,
@@ -61,11 +62,12 @@ import {
   PECH_CHANCE,
   PELOTON_MIN,
   PELOTON_REST,
+  POINT_BONUS_STEP,
   POINTS_BY_RANK,
   PREMIE_POINTS,
-  RECRUIT_MARKET_MAX,
   RECRUIT_PICKS,
   RIDERS_PER_TEAM,
+  SHOP_CONTRACTS,
   SLOT_LIMITS,
   STAGES,
   STAT_FACTOR,
@@ -79,7 +81,6 @@ import type {
   Action,
   ActiveEvent,
   Award,
-  Candidate,
   Card,
   Effort,
   EventId,
@@ -100,6 +101,7 @@ import type {
   Rider,
   RiderMove,
   RiderType,
+  ShopItem,
   SlotKind,
   Stat,
   Stats,
@@ -255,6 +257,10 @@ export function perksOf(defIds: string[]): Required<Perk> {
   const total: Required<Perk> = {
     income: 0,
     podiumBonus: 0,
+    winBonus: 0,
+    pointBonus: 0,
+    gels: 0,
+    colas: 0,
     startEnergy: 0,
     restBonus: 0,
     allesDiscount: 0,
@@ -520,7 +526,7 @@ export function reduce(prev: GameState, action: Action): GameState {
     case 'join':
       return join(s, action.name, !!action.isBot);
     case 'recruit':
-      return recruitPick(s, action.teamId, action.index);
+      return recruitBuy(s, action.teamId, action.itemId);
     case 'nameRiders':
       return nameRiders(s, action.teamId, action.names);
     case 'setTutorial':
@@ -574,16 +580,19 @@ export function reduce(prev: GameState, action: Action): GameState {
     case 'respond':
       return respond(s, action.teamId, action.offerId, action.accept);
     case 'ready':
-      if (s.phase !== 'team' && s.phase !== 'naming') throw new RuleError('Nu kun je niet klaarzetten');
+      if (s.phase !== 'team' && s.phase !== 'naming' && s.phase !== 'recruit') throw new RuleError('Nu kun je niet klaarzetten');
+      if (s.phase === 'recruit' && teamOf(s, action.teamId).riderIds.length < RECRUIT_PICKS)
+        throw new RuleError(`Kies eerst ${RECRUIT_PICKS} renners`);
       teamOf(s, action.teamId);
       s.ready[action.teamId] = true;
       if (s.teams.every((t) => s.ready[t.id])) {
-        if (s.phase === 'naming') endNaming(s);
+        if (s.phase === 'recruit') endRecruit(s);
+        else if (s.phase === 'naming') endNaming(s);
         else startRace(s);
       }
       return s;
     case 'unready':
-      if (s.phase === 'team' || s.phase === 'naming') s.ready[action.teamId] = false;
+      if (s.phase === 'team' || s.phase === 'naming' || s.phase === 'recruit') s.ready[action.teamId] = false;
       return s;
     case 'effort':
       return setEfforts(s, action.teamId, action.efforts, action.car, action.plays);
@@ -614,8 +623,16 @@ export function reduce(prev: GameState, action: Action): GameState {
 function timeout(s: GameState): GameState {
   switch (s.phase) {
     case 'recruit': {
-      const teamId = currentRecruitTeam(s);
-      if (teamId) recruitPick(s, teamId, botRecruit(s, teamId, () => 0.5));
+      // Wie nog niet klaar is, krijgt een winkelbezoek op de automatische piloot.
+      for (const t of s.teams) {
+        for (let guard = 0; guard < 12 && !s.ready[t.id]; guard++) {
+          const a = botShopStep(s, t.id, () => 0.5);
+          if (!a) break;
+          if (a.type === 'recruit') recruitBuy(s, t.id, a.itemId);
+          else s.ready[t.id] = true;
+        }
+      }
+      endRecruit(s);
       break;
     }
     case 'draft': {
@@ -752,6 +769,8 @@ function beginStage(s: GameState): void {
   s.locked = {};
   // Elke renner begint een etappe met een gratis gel: er valt altijd iets te kiezen in de race.
   for (const t of s.teams) for (let i = 0; i < RIDERS_PER_TEAM; i++) t.hand.push(newCard(s, 'gel'));
+  // Etappe 1: de sponsors worden pas getekend na het rekruteren, zie endRecruit.
+  if (s.stage > 1) for (const t of s.teams) deliverSupplies(s, t);
   // Etappe 1: willekeurig. Daarna begint de laagste in het klassement (inhaalrace).
   const ids = s.teams.map((t) => t.id);
   const order =
@@ -782,101 +801,108 @@ const TYPE_EXTRA: Record<RiderType, Stat> = {
   domestique: 'kracht',
 };
 
-function currentRecruitTeam(s: GameState): string | null {
-  return s.recruit && s.recruit.idx < s.recruit.order.length ? s.recruit.order[s.recruit.idx] : null;
+/** Wat de leveranciers van dit team aan het begin van een etappe afleveren: extra gels en cola's. */
+function deliverSupplies(s: GameState, team: Team): void {
+  const perks = perksOfTeam(team);
+  for (let i = 0; i < perks.gels; i++) team.hand.push(newCard(s, 'gel'));
+  for (let i = 0; i < perks.colas; i++) team.hand.push(newCard(s, 'cola'));
 }
 
-function recruitMarketSize(s: GameState): number {
-  return Math.min(RECRUIT_MARKET_MAX, s.teams.length + 3);
-}
-
-/** Een nieuwe kandidaat: liefst een type dat nog niet op de markt ligt. */
-function makeCandidate(s: GameState, market: Candidate[], forceFree: boolean): Candidate {
-  const present = new Set(market.map((c) => c.rider.type));
-  const missing = RIDER_TYPE_LIST.filter((t) => !present.has(t));
-  const type = pick(s, missing.length > 0 ? missing : RIDER_TYPE_LIST);
-  let tier: (typeof TALENT_TIERS)[number] = TALENT_TIERS[0];
-  if (!forceFree) {
-    const total = TALENT_TIERS.reduce((n, t) => n + t.weight, 0);
-    let roll = randInt(s, total);
-    for (const t of TALENT_TIERS) {
-      if (roll < t.weight) {
-        tier = t;
-        break;
-      }
-      roll -= t.weight;
-    }
-  }
+/** Een nieuwe renner voor een winkel, met de eigenschappen van zijn type en talentniveau. */
+function makeShopRider(s: GameState, type: RiderType, tier: (typeof TALENT_TIERS)[number], taken: Set<string>): ShopItem {
   const base: Stats = { ...RIDER_TYPES[type].base };
   base[TYPE_MAIN[type]] = Math.max(1, base[TYPE_MAIN[type]] + tier.main);
   base[TYPE_EXTRA[type]] += tier.extra;
-  const taken = new Set([...s.riders.map((r) => r.name), ...market.map((c) => c.rider.name)]);
   const names = RIDER_NAME_POOL.filter((n) => !taken.has(n));
   const n = s.nextRiderId++;
-  return {
-    price: tier.price,
-    rider: {
-      id: `cand${n}`,
-      teamId: '',
-      name: names.length > 0 ? pick(s, names) : `Renner ${n}`,
-      type,
-      quirk: pick(s, QUIRK_IDS),
-      pos: 0,
-      base,
-      form: { ...ZERO },
-      fatigue: 0,
-      trained: 0,
-      energy: 0,
-      maxEnergy: 0,
-      injury: 0,
-      hurt: false,
-    },
+  const name = names.length > 0 ? pick(s, names) : `Renner ${n}`;
+  taken.add(name);
+  const rider: Rider = {
+    id: `cand${n}`,
+    teamId: '',
+    name,
+    type,
+    quirk: pick(s, QUIRK_IDS),
+    pos: 0,
+    base,
+    form: { ...ZERO },
+    fatigue: 0,
+    trained: 0,
+    energy: 0,
+    maxEnergy: 0,
+    injury: 0,
+    hurt: false,
   };
+  return { id: rider.id, kind: 'rider', price: tier.price, rider };
 }
 
-function refillRecruit(s: GameState): void {
-  const r = s.recruit;
-  if (!r) return;
-  while (r.market.length < recruitMarketSize(s)) {
-    // Er ligt altijd een gratis renner op de markt: niemand blijft met lege handen.
-    const free = r.market.some((c) => c.price === 0);
-    r.market.push(makeCandidate(s, r.market, !free));
+/**
+ * De winkel van één team: negen renners (alle vijf de types, drie gratis neo-profs, één ster) en zes
+ * sponsorcontracten (van elke soort minstens één). Elk team krijgt zijn eigen aanbod.
+ */
+function makeShop(s: GameState, taken: Set<string>): ShopItem[] {
+  const tiers = TALENT_TIERS.flatMap((t) => Array.from({ length: t.count }, () => t));
+  const extra = shuffle(s, RIDER_TYPE_LIST).slice(0, Math.max(0, tiers.length - RIDER_TYPE_LIST.length));
+  const types = shuffle(s, [...RIDER_TYPE_LIST, ...extra]);
+  const riders = tiers.map((tier, i) => makeShopRider(s, types[i], tier, taken));
+
+  const families: ('cash' | 'bonus' | 'supply')[] = ['cash', 'bonus', 'supply'];
+  const chosen: CardDef[] = [];
+  for (const f of families) {
+    const d = pick(s, CONTRACT_LIST.filter((c) => c.contract === f));
+    chosen.push(d);
   }
+  const rest = shuffle(s, CONTRACT_LIST.filter((c) => !chosen.includes(c)));
+  while (chosen.length < SHOP_CONTRACTS && rest.length > 0) chosen.push(rest.pop()!);
+  const contracts: ShopItem[] = chosen.map((d) => ({ id: `contract-${d.id}`, kind: 'contract', def: d.id }));
+  return [...riders, ...contracts];
 }
 
 function startRecruit(s: GameState): void {
-  const order = s.teams.map((t) => t.id);
-  // Dezelfde (willekeurige) volgorde als de eerste draft, in drie rondes: heen, terug, heen.
-  const first = s.draft ? s.draft.order.slice(0, order.length) : order;
-  const rounds: string[] = [];
-  for (let i = 0; i < RECRUIT_PICKS; i++) rounds.push(...(i % 2 === 0 ? first : [...first].reverse()));
-  s.recruit = { order: rounds, idx: 0, market: [] };
-  refillRecruit(s);
+  const taken = new Set(s.riders.map((r) => r.name));
+  const shops: Record<string, ShopItem[]> = {};
+  for (const t of s.teams) shops[t.id] = makeShop(s, taken);
+  s.recruit = { shops };
+  s.ready = {};
   s.phase = 'recruit';
 }
 
-function recruitPick(s: GameState, teamId: string, index: number): GameState {
+function recruitBuy(s: GameState, teamId: string, itemId: string): GameState {
   if (s.phase !== 'recruit' || !s.recruit) throw new RuleError('Er wordt nu niet gerekruteerd');
-  if (currentRecruitTeam(s) !== teamId) throw new RuleError('Je bent niet aan de beurt');
   const team = teamOf(s, teamId);
-  const cand = s.recruit.market[index];
-  if (!cand) throw new RuleError('Die renner ligt niet op de markt');
-  if (cand.price > team.coins) throw new RuleError(`${cand.rider.name} kost ${cand.price} munten en dat heb je niet`);
-  s.recruit.market.splice(index, 1);
-  team.coins -= cand.price;
-  const rider: Rider = { ...cand.rider, id: `${teamId}r${team.riderIds.length + 1}`, teamId };
-  s.riders.push(rider);
-  team.riderIds.push(rider.id);
-  s.recruit.idx += 1;
-  if (s.recruit.idx >= s.recruit.order.length) {
-    s.recruit = null;
-    for (const t of s.teams) s.kopman[t.id] = bestKopman(s, t);
-    // Eerst de renners een naam geven: geen timer, iedereen drukt op klaar. Bots zijn meteen klaar.
-    s.phase = 'naming';
-    s.ready = Object.fromEntries(s.teams.filter((t) => t.isBot).map((t) => [t.id, true]));
-    if (s.teams.every((t) => s.ready[t.id])) endNaming(s);
-  } else refillRecruit(s);
+  if (s.ready[teamId]) throw new RuleError('Je staat op klaar: haal dat weg om nog te winkelen');
+  const shop = s.recruit.shops[teamId] ?? [];
+  const i = shop.findIndex((x) => x.id === itemId);
+  if (i < 0) throw new RuleError('Dat ligt niet in jouw winkel');
+  const item = shop[i];
+  if (item.kind === 'rider') {
+    if (team.riderIds.length >= RECRUIT_PICKS) throw new RuleError(`Je hebt al ${RECRUIT_PICKS} renners`);
+    if (item.price > team.coins) throw new RuleError(`${item.rider.name} kost ${item.price} munten en dat heb je niet`);
+    team.coins -= item.price;
+    const rider: Rider = { ...item.rider, id: `${teamId}r${team.riderIds.length + 1}`, teamId };
+    s.riders.push(rider);
+    team.riderIds.push(rider.id);
+  } else {
+    if (team.slots.sponsor.length >= SLOT_LIMITS.sponsor)
+      throw new RuleError(`Je hebt al ${SLOT_LIMITS.sponsor} sponsors: meer passen er niet op je shirt`);
+    team.coins += CARD_DEFS[item.def].signing ?? 0;
+    team.slots.sponsor.push(newCard(s, item.def));
+  }
+  shop.splice(i, 1);
   return s;
+}
+
+function endRecruit(s: GameState): void {
+  s.recruit = null;
+  for (const t of s.teams) {
+    s.kopman[t.id] = bestKopman(s, t);
+    // Etappe 1: de leveranciers leveren nu hun eerste lading af.
+    if (s.stage === 1) deliverSupplies(s, t);
+  }
+  // Eerst de renners een naam geven: geen timer, iedereen drukt op klaar. Bots zijn meteen klaar.
+  s.phase = 'naming';
+  s.ready = Object.fromEntries(s.teams.filter((t) => t.isBot).map((t) => [t.id, true]));
+  if (s.teams.every((t) => s.ready[t.id])) endNaming(s);
 }
 
 function endNaming(s: GameState): void {
@@ -894,28 +920,73 @@ function nameRiders(s: GameState, teamId: string, names: string[]): GameState {
   return s;
 }
 
-/** Het beste wat een team zich nog kan veroorloven: past bij het parcours, met wat variatie in de ploeg. */
-export function botRecruit(s: GameState, teamId: string, rand: () => number): number {
+/** Grof geschat: wat is dit contract de speler in munten waard over een seizoen? */
+export function contractValue(d: CardDef): number {
+  const p = d.perk ?? {};
+  return (
+    (d.signing ?? 0) +
+    (p.income ?? 0) * 2.5 +
+    (p.podiumBonus ?? 0) * 0.8 +
+    (p.winBonus ?? 0) * 0.6 +
+    (p.pointBonus ?? 0) * 5.5 +
+    (p.gels ?? 0) * 3 +
+    (p.colas ?? 0) * 3 +
+    (p.service ?? 0) * 3 +
+    (p.startEnergy ?? 0) * 1.5 +
+    (p.shield ?? 0) * 2.5 +
+    (p.pechReduction ?? 0) * 2 +
+    (p.fatigueRecover ?? 0) * 1.5 +
+    (p.overtrainTolerance ?? 0) * 1 +
+    (p.restBonus ?? 0) * 2
+  );
+}
+
+/**
+ * De volgende stap van een bot (of de automatische piloot bij een time-out) in de winkel:
+ * eerst de beste contracten tekenen, dan de renners kiezen, dan klaar. Null als er niets meer te doen is.
+ */
+export function botShopStep(s: GameState, teamId: string, rand: () => number): Action | null {
   const team = teamOf(s, teamId);
-  const market = s.recruit?.market ?? [];
-  const owned = team.riderIds.map((id) => riderOf(s, id));
-  // Hou munten over voor wie nog moet komen: nooit alles uitgeven aan de eerste renner.
-  const picksLeft = RECRUIT_PICKS - owned.length;
-  let best = -1;
-  let bestScore = -Infinity;
-  market.forEach((c, i) => {
-    if (c.price > team.coins) return;
-    const fit = stageFit(c.rider, s.terrain, 0);
-    const sameType = owned.some((r) => r.type === c.rider.type);
-    const reserve = Math.max(0, picksLeft - 1);
-    const left = team.coins - c.price;
-    const score = fit + c.rider.base.uithouding * 0.2 - c.price * 0.45 + (sameType ? -1.2 : 0.4) - (left < reserve ? 0.6 : 0) + rand() * 0.8;
-    if (score > bestScore) {
-      bestScore = score;
-      best = i;
+  const shop = s.recruit?.shops[teamId] ?? [];
+  if (s.phase !== 'recruit' || s.ready[teamId]) return null;
+
+  // 1. Contracten: de waardevolste eerst. Direct geld vergroot meteen je budget voor renners.
+  if (team.slots.sponsor.length < SLOT_LIMITS.sponsor) {
+    const best = shop
+      .filter((x): x is Extract<ShopItem, { kind: 'contract' }> => x.kind === 'contract')
+      .map((x) => ({ x, v: contractValue(CARD_DEFS[x.def]) + rand() * 2 }))
+      .sort((a, b) => b.v - a.v)[0];
+    if (best) return { type: 'recruit', teamId, itemId: best.x.id };
+  }
+
+  // 2. Renners: wat past bij het parcours, met een mix van types in de ploeg.
+  if (team.riderIds.length < RECRUIT_PICKS) {
+    const owned = team.riderIds.map((id) => riderOf(s, id));
+    const picksLeft = RECRUIT_PICKS - owned.length;
+    let bestId: string | null = null;
+    let bestScore = -Infinity;
+    for (const x of shop) {
+      if (x.kind !== 'rider' || x.price > team.coins) continue;
+      const sameType = owned.some((r) => r.type === x.rider.type);
+      // Hou iets over voor kaarten en voor de renners die nog moeten komen.
+      const left = team.coins - x.price;
+      const reserve = 1 + Math.max(0, picksLeft - 1);
+      const score =
+        stageFit(x.rider, s.terrain, 0) +
+        x.rider.base.uithouding * 0.2 -
+        x.price * 0.35 +
+        (sameType ? -1.2 : 0.4) -
+        (left < reserve ? 0.6 : 0) +
+        rand() * 0.8;
+      if (score > bestScore) {
+        bestScore = score;
+        bestId = x.id;
+      }
     }
-  });
-  return Math.max(0, best);
+    if (bestId) return { type: 'recruit', teamId, itemId: bestId };
+  }
+  if (team.riderIds.length >= RECRUIT_PICKS) return { type: 'ready', teamId };
+  return null;
 }
 
 // ---- Draft en winkel ---------------------------------------------------------
@@ -1553,7 +1624,8 @@ function finishStage(s: GameState): void {
     const best = Math.min(...mine.map((x) => x.rank));
     const perks = perksOfTeam(t);
     const prizeCoins = best === 1 ? 3 : best <= 3 ? 2 : 1;
-    const sponsorCoins = perks.income + (best <= 3 ? perks.podiumBonus : 0);
+    const sponsorCoins =
+      perks.income + (best <= 3 ? perks.podiumBonus : 0) + Math.floor(stagePoints / POINT_BONUS_STEP) * perks.pointBonus;
     return {
       teamId: t.id,
       kopmanId: s.kopman[t.id],
@@ -1583,6 +1655,9 @@ function finishStage(s: GameState): void {
   const byPoints = [...results].sort((a, b) => b.stagePoints - a.stagePoints || a.best - b.best);
   const lastRiderTeam = ordered[ordered.length - 1].r.teamId;
   give(byPoints[0].teamId, 1);
+  // Sponsors die betalen voor winst: de etappewinnaar (de meeste punten) krijgt zijn bonus.
+  const winner = results.find((r) => r.teamId === byPoints[0].teamId)!;
+  winner.sponsorCoins += perksOfTeam(teamOf(s, winner.teamId)).winBonus;
   const standing = [...s.teams]
     .map((t) => ({ t, total: t.points + (results.find((r) => r.teamId === t.id)?.stagePoints ?? 0) }))
     .sort((a, b) => a.total - b.total || a.t.coins - b.t.coins);
@@ -1716,7 +1791,6 @@ function rematch(s: GameState): GameState {
 
 export function toPublic(s: GameState): PublicState {
   const current = currentDraftTeam(s);
-  const recruitTeam = currentRecruitTeam(s);
   return {
     phase: s.phase,
     tutorial: s.tutorial,
@@ -1761,15 +1835,7 @@ export function toPublic(s: GameState): PublicState {
     draft: s.draft
       ? { order: s.draft.order, idx: s.draft.idx, currentTeamId: current, total: s.draft.order.length }
       : null,
-    recruit: s.recruit
-      ? {
-          order: s.recruit.order,
-          idx: s.recruit.idx,
-          currentTeamId: recruitTeam,
-          total: s.recruit.order.length,
-          market: s.recruit.market,
-        }
-      : null,
+    recruit: s.recruit ? { picks: RECRUIT_PICKS, contracts: SLOT_LIMITS.sponsor } : null,
     weather: s.weather,
     report: s.report,
     stageResult: s.stageResult,
@@ -1797,9 +1863,8 @@ export function toPlayerView(s: GameState, teamId: string): PlayerView | null {
     offersIn: s.offers.filter((o) => o.to === teamId).map((o) => withCards(s, o)),
     offerOut: out ? withCards(s, out) : null,
     sabotageOn: t.sabotage,
-    pickPending:
-      (s.phase === 'draft' && currentDraftTeam(s) === teamId) ||
-      (s.phase === 'recruit' && currentRecruitTeam(s) === teamId),
+    pickPending: s.phase === 'draft' && currentDraftTeam(s) === teamId,
+    shop: s.phase === 'recruit' ? (s.recruit?.shops[teamId] ?? []) : [],
     kopmanId: s.kopman[teamId] ?? t.riderIds[0],
     stats: t.stats,
   };
