@@ -2,7 +2,7 @@
 // Regels vermijden persoonlijke voornaamwoorden: renners worden bij naam genoemd.
 // Met de tutorial aan leggen ze daarnaast per onderdeel uit hoe het spel werkt.
 
-import { CARD_DEFS, COMMENTATORS, EVENTS, KIND_LABELS, PREMIE_INFO, QUIRKS, RIDER_TYPES, STAGE_INFO, WEATHER } from './content';
+import { CARD_DEFS, COMMENTATORS, EVENTS, KIND_LABELS, PREMIE_INFO, QUIRKS, RIDER_TYPES, stageInfo, WEATHER } from './content';
 import type { CommentatorId } from './content';
 import type { PublicState, Rider } from './types';
 import { STAGES } from './types';
@@ -59,7 +59,7 @@ export function introLines(s: PublicState): Line[] {
 }
 
 export function stageLines(s: PublicState): Line[] {
-  const info = STAGE_INFO[Math.min(STAGES, s.stage) - 1];
+  const info = stageInfo(s.course, Math.min(STAGES, s.stage));
   const out: Line[] = [j(`${info.name}. ${info.blurb}`)];
   const weather: Record<string, string[]> = {
     dry: [
