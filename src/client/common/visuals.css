@@ -178,7 +178,18 @@
 }
 .coins-vis b,
 .handfan b {
+  display: inline-block;
   font-size: 13px;
+}
+/* A coin was added: the top one drops onto the stack. */
+.coins-vis .stackc.drop i:last-child {
+  animation: coin-drop 480ms var(--ease-out) backwards;
+}
+@keyframes coin-drop {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--rise) * -1.6));
+  }
 }
 .handfan .fan {
   position: relative;
@@ -345,7 +356,7 @@
   animation-delay: 1s;
 }
 .step3 .onstep .win {
-  animation: pod-bounce 1.2s ease-in-out 2.2s infinite;
+  animation: pod-bounce 1.2s ease-in-out 2.2s 4;
 }
 .step3 .trophy {
   position: absolute;
@@ -353,7 +364,7 @@
   right: -34%;
   font-size: clamp(26px, 3vw, 46px);
   filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.5));
-  animation: pod-bounce 1.2s ease-in-out 2.4s infinite;
+  animation: pod-bounce 1.2s ease-in-out 2.4s 4;
 }
 .step3 .figname {
   margin-top: 6px;
@@ -492,7 +503,7 @@
   height: 14px;
   border-radius: 2px;
   opacity: 0;
-  animation: confetti var(--d) linear var(--w) infinite;
+  animation: confetti var(--d) linear var(--w) 3;
 }
 
 @keyframes pod-grow {
