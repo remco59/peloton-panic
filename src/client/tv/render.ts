@@ -19,7 +19,7 @@ const BASE_Y = 160; // road centre line at the camera tile
 const SLOPE = 7; // px of elevation per climbing / descending tile
 const ANIM_MS = 3600;
 const COL = 2; // road column width in logical px
-const FONT = '700 7px Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
+const FONT = '700 8px "Barlow Condensed", "Arial Narrow", Inter, system-ui, sans-serif';
 
 const C = {
   skyTop: '#5ea6e6',
@@ -55,7 +55,53 @@ const ease = (t: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
 const edgeColor = (t: Terrain) =>
   t === 'climb' ? '#ff9f43' : t === 'descent' ? '#54a0ff' : t === 'cobbles' ? '#b79a70' : '#e9ebf3';
 
+/** Path of a team's shape mark, centred on (x, y). Teams are told apart by shape as well as hue. */
+function shapePath(c: CanvasRenderingContext2D, shape: string, x: number, y: number, r: number) {
+  c.beginPath();
+  if (shape === 'square') {
+    c.rect(x - r * 0.85, y - r * 0.85, r * 1.7, r * 1.7);
+  } else if (shape === 'triangle') {
+    c.moveTo(x, y - r);
+    c.lineTo(x + r, y + r * 0.8);
+    c.lineTo(x - r, y + r * 0.8);
+    c.closePath();
+  } else if (shape === 'diamond') {
+    c.moveTo(x, y - r * 1.15);
+    c.lineTo(x + r * 1.15, y);
+    c.lineTo(x, y + r * 1.15);
+    c.lineTo(x - r * 1.15, y);
+    c.closePath();
+  } else if (shape === 'hexagon') {
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 3) * i;
+      const px = x + Math.cos(a) * r;
+      const py = y + Math.sin(a) * r;
+      if (i) c.lineTo(px, py);
+      else c.moveTo(px, py);
+    }
+    c.closePath();
+  } else if (shape === 'plus') {
+    const t = r * 0.38;
+    c.moveTo(x - t, y - r);
+    c.lineTo(x + t, y - r);
+    c.lineTo(x + t, y - t);
+    c.lineTo(x + r, y - t);
+    c.lineTo(x + r, y + t);
+    c.lineTo(x + t, y + t);
+    c.lineTo(x + t, y + r);
+    c.lineTo(x - t, y + r);
+    c.lineTo(x - t, y + t);
+    c.lineTo(x - r, y + t);
+    c.lineTo(x - r, y - t);
+    c.lineTo(x - t, y - t);
+    c.closePath();
+  } else {
+    c.arc(x, y, r, 0, Math.PI * 2);
+  }
+}
+
 interface Tag {
+  shape: string;
   x: number;
   y: number;
   rank: number;
@@ -363,10 +409,11 @@ export class TrackRenderer {
         this.offscreenMarker(sy, col.hex, false);
         continue;
       }
-      this.cyclist(sx, sy, col.hex, col.dark, phase, i === leaderIdx);
+      this.cyclist(sx, sy, col.hex, col.dark, col.shape, phase, i === leaderIdx);
       const row = rows.get(r.id);
       if (row) {
         tags.push({
+          shape: col.shape,
           x: sx,
           y: sy - 23,
           rank: row.rank,
@@ -422,9 +469,10 @@ export class TrackRenderer {
       const label = `${t.kop ? '★ ' : ''}${t.name.slice(0, 8)}`;
       const gap = t.gap > 0 ? `−${t.gap}` : '';
       const wRank = 8.5;
-      const wName = c.measureText(label).width + 5;
+      const wMark = 8;
+      const wName = c.measureText(label).width + 4;
       const wGap = gap ? c.measureText(gap).width + 5 : 0;
-      const w = wRank + wName + wGap;
+      const w = wRank + wMark + wName + wGap;
       let y = t.y;
       const x0 = t.x - w / 2;
       for (let bump = 0; bump < 4; bump++) {
@@ -455,11 +503,14 @@ export class TrackRenderer {
       c.textAlign = 'center';
       c.fillStyle = C.ink;
       c.fillText(String(t.rank), x0 + wRank / 2, top + H_TAG / 2 + 0.3);
+      shapePath(c, t.shape, x0 + wRank + wMark / 2, top + H_TAG / 2, 2.4);
+      c.fillStyle = t.hex;
+      c.fill();
       c.fillStyle = t.rank === 1 ? '#ffc83d' : '#ffffff';
-      c.fillText(label, x0 + wRank + wName / 2, top + H_TAG / 2 + 0.3);
+      c.fillText(label, x0 + wRank + wMark + wName / 2, top + H_TAG / 2 + 0.3);
       if (gap) {
         c.fillStyle = '#ff9f9f';
-        c.fillText(gap, x0 + wRank + wName + wGap / 2, top + H_TAG / 2 + 0.3);
+        c.fillText(gap, x0 + wRank + wMark + wName + wGap / 2, top + H_TAG / 2 + 0.3);
       }
       c.textAlign = 'start';
       c.textBaseline = 'alphabetic';
@@ -638,7 +689,7 @@ export class TrackRenderer {
     c.textBaseline = 'alphabetic';
   }
 
-  private cyclist(x: number, y: number, jersey: string, dark: string, phase: number, leader: boolean) {
+  private cyclist(x: number, y: number, jersey: string, dark: string, shape: string, phase: number, leader: boolean) {
     const c = this.ctx;
     const seg = (x0: number, y0: number, x1: number, y1: number, col: string | CanvasGradient, w: number) => {
       c.strokeStyle = col;
@@ -716,6 +767,9 @@ export class TrackRenderer {
     seg(hip.x, hip.y, sh.x, sh.y, dark, 3.7);
     seg(hip.x, hip.y, sh.x, sh.y, jersey, 3.1);
     seg(hip.x + 0.2, hip.y - 0.9, sh.x + 0.2, sh.y - 0.9, 'rgba(255,255,255,0.28)', 1);
+    shapePath(c, shape, (hip.x + sh.x) / 2, (hip.y + sh.y) / 2, 1.15);
+    c.fillStyle = shape === 'hexagon' ? C.ink : '#ffffff';
+    c.fill();
     seg(sh.x, sh.y, x + 5.6, y - 10.4, C.skinShade, 1.3);
     seg(sh.x - 0.2, sh.y, x + 5.5, y - 10.5, C.skin, 0.9);
     c.fillStyle = C.skin;

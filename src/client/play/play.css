@@ -17,7 +17,7 @@ body {
   text-align: center;
 }
 .small {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -46,7 +46,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -62,9 +62,9 @@ input {
   border-radius: var(--r-md);
   width: 100%;
 }
-input:focus {
+input:focus-visible {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--sky);
 }
 input.code {
   font-size: 28px;
@@ -111,8 +111,9 @@ button:disabled {
   transform: scale(0.98);
 }
 .small-btn {
+  min-height: 44px;
   padding: 11px 14px;
-  font-size: 13px;
+  font-size: 14px;
   background: var(--panel-2);
   border: 0;
   border-radius: var(--r-sm);
@@ -146,7 +147,7 @@ button:disabled {
   font-weight: 700;
 }
 .bar .ph {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -223,7 +224,7 @@ main {
   gap: 10px;
 }
 .crown {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
   color: var(--accent);
@@ -375,7 +376,7 @@ p {
   font-weight: 800;
 }
 .card .sub {
-  font-size: 11px;
+  font-size: 12px;
   text-align: center;
   line-height: 1.2;
   color: rgba(22, 25, 38, 0.62);
@@ -546,7 +547,7 @@ p {
   background: transparent;
   padding: 11px 4px;
   border-radius: var(--r-sm);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.06em;
   color: var(--muted);
 }
@@ -560,7 +561,7 @@ p {
   border-radius: 999px;
   background: var(--panel-2);
   color: var(--ink);
-  font-size: 10px;
+  font-size: 12px;
 }
 .tab.on .badge {
   background: var(--bg);
@@ -756,7 +757,7 @@ p {
 }
 .eff .en {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .eff.on {
   background: var(--accent);
@@ -826,10 +827,9 @@ p {
 
 /* ---- Tutorial-uitleg ---- */
 .hint {
-  background: #2a2412;
+  background: var(--panel-2);
   border-radius: var(--r-lg);
   padding: 14px 16px 12px;
-  box-shadow: inset 4px 0 0 var(--accent);
 }
 .hint-head {
   display: flex;
@@ -853,7 +853,7 @@ p {
   line-height: 1.4;
 }
 .hint li::marker {
-  color: var(--accent);
+  color: var(--ink);
   font-weight: 700;
 }
 .hint .small-btn {
@@ -923,9 +923,10 @@ p {
 }
 .hint-btn,
 .info {
+  position: relative;
   flex: none;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
   font-size: 14px;
@@ -936,9 +937,16 @@ p {
   background: var(--panel-2);
   color: var(--muted);
 }
+.hint-btn::after,
+.info::after {
+  content: '';
+  position: absolute;
+  inset: -6px; /* 44px aanraakvlak rond de 32px knop */
+}
 .hint-btn {
-  background: var(--accent);
-  color: var(--on-accent);
+  background: var(--panel-2);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 2px var(--muted);
 }
 .turn {
   padding: 10px 14px;
@@ -1175,7 +1183,7 @@ select.pick {
 .profile .flag {
   position: absolute;
   transform: translateX(-4px);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.04em;
   color: var(--accent);
@@ -1238,7 +1246,7 @@ select.pick {
   position: absolute;
   right: 0;
   top: 8px;
-  font-size: 9px;
+  font-size: 12px;
   color: var(--ink);
   display: none;
 }
@@ -1292,7 +1300,7 @@ select.pick {
   border-radius: 999px;
   background: var(--accent);
   color: var(--on-accent);
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.04em;
   white-space: nowrap;
 }
@@ -1315,7 +1323,7 @@ select.pick {
   font-size: 12px;
 }
 .efforts.four .eff .en {
-  font-size: 10px;
+  font-size: 12px;
 }
 .eff.help .mv {
   color: var(--good);
@@ -1339,15 +1347,20 @@ select.pick {
   text-align: left;
 }
 
-/* Vijf tabs: tellers hangen in de hoek zodat de namen passen. */
-.tabs {
+/* Vijf tabs: tellers hangen in de hoek zodat de namen passen. Ze staan onderaan, binnen bereik van de duim. */
+.screen > .tabs {
+  order: 5;
   grid-template-columns: repeat(5, 1fr);
   gap: 3px;
 }
+.screen > .dock {
+  order: 6;
+}
 .tab {
-  font-size: 10px;
-  letter-spacing: 0.02em;
-  padding: 11px 0;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  padding: 0;
+  min-height: 44px;
 }
 .tab .badge {
   position: absolute;
@@ -1466,7 +1479,7 @@ select.pick {
 }
 .stand-row .gl.ok {
   color: var(--accent);
-  font-size: 11px;
+  font-size: 12px;
 }
 .stand-gap {
   margin-left: calc(2ch + 6px + 6px + 4px);
@@ -1475,7 +1488,7 @@ select.pick {
   display: flex;
   align-items: center;
   border-left: 2px dashed var(--line);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--muted);
@@ -1490,7 +1503,7 @@ select.pick {
   position: absolute;
   left: 0;
   top: 0;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.04em;
   color: var(--muted);
@@ -1533,7 +1546,7 @@ select.pick {
   gap: 8px;
 }
 .cand .price {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--accent);
 }
 .cand .price.free {
@@ -1679,7 +1692,7 @@ select.pick {
   grid-template-columns: repeat(2, 1fr);
 }
 .tabs.two .tab {
-  font-size: 11px;
+  font-size: 12px;
   padding: 11px 4px;
 }
 .tabs.two .tab .badge {
@@ -1695,7 +1708,7 @@ select.pick {
 }
 .ct-tag {
   text-align: center;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;

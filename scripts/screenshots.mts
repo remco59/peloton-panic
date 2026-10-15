@@ -4,9 +4,9 @@
 //   npm run dev          (terminal 1)
 //   npm run screenshots  (terminal 2)  ->  docs/screenshots/*.png
 
-import { execFile } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { chromium, type Browser } from 'playwright-core';
 import WebSocket from 'ws';
 import { CARD_DEFS } from '../src/shared/content';
 import type { ClientMsg, ServerMsg } from '../src/shared/protocol';
@@ -14,33 +14,41 @@ import type { Effort, PlayerView, PublicState } from '../src/shared/types';
 
 const BASE = process.env.PP_URL ?? 'http://localhost:3000';
 const WS = BASE.replace(/^http/, 'ws') + '/ws';
-const CHROME = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const CHROME = process.env.CHROME || undefined; // leeg: Playwrights eigen Chromium
 const OUT = process.env.PP_OUT ?? join(process.cwd(), 'docs', 'screenshots');
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function capture(name: string, url: string, w: number, h: number, scale: number, waitMs: number): Promise<void> {
-  return new Promise((resolve) => {
-    execFile(
-      CHROME,
-      [
-        '--headless=new',
-        '--no-sandbox',
-        `--user-data-dir=/tmp/pp-shot-${name}-${Date.now()}`,
-        '--no-first-run',
-        '--hide-scrollbars',
-        `--window-size=${w},${h}`,
-        `--force-device-scale-factor=${scale}`,
-        `--timeout=${waitMs}`,
-        `--screenshot=${join(OUT, name + '.png')}`,
-        url,
-      ],
-      { timeout: 60000 },
-      (err) => {
-        console.log(err ? `MISLUKT ${name}: ${err.message}` : `opgeslagen ${name}`);
-        resolve();
-      },
-    );
+let browser: Browser | null = null;
+
+// Echte pagina in headless Chromium: we wachten tot de websocket verbonden is (geen "Verbinden...")
+// en geven animaties daarna `waitMs` om te rusten voordat de screenshot valt.
+async function capture(name: string, url: string, w: number, h: number, scale: number, waitMs: number): Promise<void> {
+  browser ??= await chromium.launch({
+    executablePath: CHROME,
+    args: ['--no-sandbox', '--no-proxy-server', '--hide-scrollbars'],
   });
+  const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: scale });
+  try {
+    const page = await ctx.newPage();
+    await page.goto(url, { waitUntil: 'load' });
+    await page.waitForFunction(
+      () => {
+        const texts = [document.body.innerText, ...[...document.querySelectorAll('iframe')].map((f) => f.contentDocument?.body?.innerText ?? '')];
+        return texts.some((t) => t.length > 0) && !texts.some((t) => /Verbinden|Kamer openen/.test(t));
+      },
+      undefined,
+      { timeout: 15000 },
+    );
+    // De uitleg-sheet opent vanzelf; sluit hem zodat de screenshot de echte bediening laat zien.
+    for (const frame of page.frames()) await frame.locator('.sheet .big.primary').click({ timeout: 1500 }).catch(() => {});
+    await page.waitForTimeout(waitMs);
+    await page.screenshot({ path: join(OUT, name + '.png') });
+    console.log(`opgeslagen ${name}`);
+  } catch (err) {
+    console.log(`MISLUKT ${name}: ${(err as Error).message}`);
+  } finally {
+    await ctx.close();
+  }
 }
 
 class Client {

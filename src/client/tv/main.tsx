@@ -1,4 +1,4 @@
-import { render } from 'preact';
+import { render, type ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import QRCode from 'qrcode';
 import '../common/theme.css';
@@ -93,6 +93,11 @@ function App() {
     [],
   );
   const track = useMemo(() => new Soundtrack(), []);
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setSlow(true), 8000);
+    return () => clearTimeout(id);
+  }, []);
 
   useEffect(() => {
     const origin = location.origin;
@@ -150,6 +155,14 @@ function App() {
       <div class="boot ty">
         <div>PELOTON PANIC</div>
         <div class="dim">{online ? 'Kamer openen...' : 'Verbinden...'}</div>
+        {slow && (
+          <div class="retry" role="status">
+            Dit duurt langer dan normaal. Controleer of de server draait en of deze tv op hetzelfde wifi zit.
+            <button class="retry-btn" onClick={() => location.reload()}>
+              Opnieuw proberen
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -157,15 +170,16 @@ function App() {
   const { state } = snap;
   const clock = () => Date.now() + offset.current;
   const inRace = state.phase === 'race' || state.phase === 'resolve' || state.phase === 'results';
+  const veiled = state.phase === 'lobby' || state.phase === 'briefing' || state.phase === 'results' || state.phase === 'finished';
   const panelPhase = state.phase === 'draft' || state.phase === 'team' || state.phase === 'recruit' || state.phase === 'naming';
 
   return (
     <div class="tv">
       <Header snap={snap} clock={clock} online={online} />
       <div class="main">
-        <Stage state={state} />
-        <aside class={`side ${state.tutorial && !panelPhase ? 'with-tut' : ''}`}>
-          {!panelPhase && <TutorialCard state={state} />}
+        <Stage state={state}>{inRace && <TutorialCard state={state} variant="lower" />}</Stage>
+        <aside class={`side ${veiled ? 'veiled' : ''}`}>
+          {!panelPhase && !inRace && <TutorialCard state={state} />}
           {inRace ? <EventCard state={state} /> : <StageCard state={state} />}
           <Standings snap={snap} />
         </aside>
@@ -242,7 +256,7 @@ function Header({ snap, clock, online }: { snap: Snapshot; clock: () => number; 
   );
 }
 
-function Stage({ state }: { state: PublicState }) {
+function Stage({ state, children }: { state: PublicState; children?: ComponentChildren }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const r = useRef<TrackRenderer | null>(null);
   useEffect(() => {
@@ -254,7 +268,8 @@ function Stage({ state }: { state: PublicState }) {
   }, [state]);
   return (
     <div class="stage frame">
-      <canvas ref={ref} width={W} height={H} />
+      <canvas ref={ref} width={W} height={H} role="img" aria-label="De koers: renners op het parcours" />
+      {children}
     </div>
   );
 }
@@ -265,13 +280,14 @@ function demo(state: PublicState): PublicState {
   return { ...state, terrain: Array.from({ length: 32 }, () => 'flat' as const), trackLength: 32 };
 }
 
-function TutorialCard({ state, inline }: { state: PublicState; inline?: boolean }) {
+function TutorialCard({ state, variant = 'rail' }: { state: PublicState; variant?: 'rail' | 'inline' | 'lower' }) {
   const h = tvHint(state);
   if (!h) return null;
   return (
-    <div class={`tutcard ${inline ? 'inline' : 'frame'}`}>
-      <div class="tag ty">TUTORIAL · {h.title.toUpperCase()}</div>
-      <p>{h.text}</p>
+    <div class={`tutcard ${variant}`} role="note">
+      <p>
+        <b class="ty">{h.title}</b> {h.text}
+      </p>
     </div>
   );
 }
@@ -281,7 +297,7 @@ function StageCard({ state }: { state: PublicState }) {
   const early = state.phase === 'lobby' || state.phase === 'briefing';
   return (
     <div class="event frame">
-      <div class="tag ty">{early ? 'SEIZOEN' : `ETAPPE ${state.stage}`}</div>
+      <div class="tag ty">{early ? 'Seizoen' : `Etappe ${state.stage}`}</div>
       <div class="title ty">{early ? `${STAGES} etappes, 1 winnaar` : info.stageName}</div>
       <p>{early ? 'Bouw je team op, train je renners en win het seizoen.' : info.stageBlurb}</p>
       {!early && <p class="profile-line">Parcours: {info.summary}</p>}
@@ -328,7 +344,7 @@ function EventCard({ state }: { state: PublicState }) {
   const team = state.event.targetTeamId ? teamById(state, state.event.targetTeamId) : null;
   return (
     <div class={`event frame ${def.silly ? 'silly' : ''}`}>
-      <div class="tag ty">{def.silly ? 'NIEUWS' : 'OMSTANDIGHEDEN'}</div>
+      <div class="tag ty">{def.silly ? 'Nieuws' : 'Omstandigheden'}</div>
       <div class="ev-head">
         <span class="ev-icon" aria-hidden="true">{EVENT_ICON[def.id]}</span>
         <div class="title ty">{def.title}</div>
@@ -358,7 +374,7 @@ function Ladder({ snap }: { snap: Snapshot }) {
   return (
     <div class={`standings ladder frame ${rows.length > 9 ? 'dense' : ''}`} style={{ '--n': rows.length }}>
       <div class="tag ty">
-        KOERS · {rows.length} RENNERS · TEGEL {lead} VAN {state.trackLength}
+        Koers · {rows.length} renners · tegel {lead} van {state.trackLength}
       </div>
       {rows.map((row, i) => {
         const team = teamById(state, row.teamId);
@@ -407,7 +423,7 @@ function Standings({ snap }: { snap: Snapshot }) {
   const maxPts = Math.max(1, ...rows.map((t) => t.points));
   return (
     <div class="standings frame">
-      <div class="tag ty">KLASSEMENT</div>
+      <div class="tag ty">Klassement</div>
       {rows.map((t, i) => {
         const col = colorOf(t);
         let waiting = '';
@@ -420,7 +436,7 @@ function Standings({ snap }: { snap: Snapshot }) {
             <span class="rank">
               <Medal place={i + 1} size={26} />
             </span>
-            {rs.length > 0 ? <TeamStack riders={rs} color={t.color} size={32} /> : <span class="chip" style={{ background: col.hex }} />}
+            {rs.length > 0 ? <TeamStack riders={rs} color={t.color} size={32} /> : <span class="chip" data-s={col.shape} style={{ background: col.hex }} />}
             <div class="who">
               <div class="name">
                 {t.name}
@@ -556,21 +572,20 @@ function NamingPanel({ snap }: { snap: Snapshot }) {
     <div class="panel frame">
       <div class="ph-head">
         <div>
-          <div class="kicker ty">NAMEN: GEEF JE RENNERS EEN NAAM</div>
           <div class="big-line ty">
             {done}/{state.teams.length} teams klaar. Geen timer, de draft begint zodra iedereen klaar is.
           </div>
         </div>
       </div>
-      <TutorialCard state={state} inline />
+      <TutorialCard state={state} variant="inline" />
       <div class="boards">
         {state.teams.map((t) => {
           const col = colorOf(t);
           const ready = t.ready || t.isBot;
           return (
-            <div class={`board ${ready ? 'ready' : ''}`} key={t.id} style={{ borderColor: col.hex }}>
+            <div class={`board ${ready ? 'ready' : ''}`} key={t.id}>
               <div class="bh">
-                <span class="chip" style={{ background: col.hex }} />
+                <span class="chip" data-s={col.shape} style={{ background: col.hex }} />
                 <b>{t.name}</b>
                 {t.isBot && <span class="bot"> bot</span>}
                 <span class={`rd ty ${ready ? 'ok' : ''}`}>{ready ? 'KLAAR' : 'BEZIG'}</span>
@@ -599,19 +614,18 @@ function RecruitPanel({ snap }: { snap: Snapshot }) {
     <div class="panel frame">
       <div class="ph-head">
         <div>
-          <div class="kicker ty">DE WINKEL: RENNERS EN SPONSORS</div>
           <div class="big-line ty">
             {done}/{state.teams.length} teams klaar. Iedereen winkelt tegelijk, in zijn eigen winkel.
           </div>
         </div>
       </div>
-      <TutorialCard state={state} inline />
+      <TutorialCard state={state} variant="inline" />
       <div class="boards">
         {state.teams.map((t) => {
           const col = colorOf(t);
           const riders = ridersOf(state, t.id);
           return (
-            <div class={`board ${t.ready ? 'ready' : ''}`} key={t.id} style={{ borderColor: col.hex }}>
+            <div class={`board ${t.ready ? 'ready' : ''}`} key={t.id}>
               <div class="bh">
                 <TeamJersey color={t.color} size={26} />
                 <b>{t.name}</b>
@@ -674,11 +688,10 @@ function DraftPanel({ snap }: { snap: Snapshot }) {
     <div class="panel frame">
       <div class="ph-head">
         <div>
-          <div class="kicker ty">DRAFT: KIES JE KAARTEN</div>
           <div class="big-line ty">
             {current ? (
               <>
-                <span class="chip" style={{ background: colorOf(current).hex }} /> {current.name} is aan de beurt
+                <span class="chip" data-s={colorOf(current).shape} style={{ background: colorOf(current).hex }} /> {current.name} is aan de beurt
               </>
             ) : (
               'De draft is klaar'
@@ -701,12 +714,12 @@ function DraftPanel({ snap }: { snap: Snapshot }) {
           })}
         </div>
       </div>
-      <TutorialCard state={state} inline />
+      <TutorialCard state={state} variant="inline" />
       <p class="profile-line">
         <b>{stageProfile(state).stageName}</b> · {stageProfile(state).summary}
         {state.premies.length > 0 && ` · premies: ${stageProfile(state).premies.toLowerCase()}`}
       </p>
-      <div class="kicker ty">DE MARKT ({state.deckCount} kaarten op de stapel)</div>
+      <div class="kicker ty">De markt ({state.deckCount} kaarten op de stapel)</div>
       <div class="market">
         {state.market.map((def, i) => (
           <PlayingCard key={i} def={def} price index={i} fan />
@@ -726,7 +739,6 @@ function TeamPanel({ snap }: { snap: Snapshot }) {
     <div class="panel frame">
       <div class="ph-head">
         <div>
-          <div class="kicker ty">VOORBEREIDING: ETAPPE {state.stage}</div>
           <div class="big-line ty">Kies je kopman, train je renners en bouw je team uit</div>
           <p class="profile-line">
             {stageProfile(state).summary}
@@ -734,16 +746,16 @@ function TeamPanel({ snap }: { snap: Snapshot }) {
           </p>
         </div>
       </div>
-      <TutorialCard state={state} inline />
+      <TutorialCard state={state} variant="inline" />
       <div class="boards">
         {state.teams.map((t) => {
           const col = colorOf(t);
           const tol = toleranceOf(t);
           const all = [...t.slots.sponsor, ...t.slots.staff, ...t.slots.material, ...t.slots.car];
           return (
-            <div class={`board ${t.ready ? 'ready' : ''}`} key={t.id} style={{ borderColor: col.hex }}>
+            <div class={`board ${t.ready ? 'ready' : ''}`} key={t.id}>
               <div class="bh">
-                <span class="chip" style={{ background: col.hex }} />
+                <span class="chip" data-s={col.shape} style={{ background: col.hex }} />
                 <b>{t.name}</b>
                 {t.isBot && <span class="bot"> bot</span>}
                 <span class="coins">
@@ -805,7 +817,7 @@ function Lobby({ snap }: { snap: Snapshot }) {
             {state.teams.map((t) => {
               const col = colorOf(t);
               return (
-                <div class="team" key={t.id} style={{ borderColor: col.hex }}>
+                <div class="team" key={t.id}>
                   <div class="tn">
                     <TeamJersey color={t.color} size={30} /> {t.name}
                     {t.id === snap.presidentTeamId && <span class="crown ty"> PRESIDENT</span>}
@@ -926,7 +938,7 @@ function Results({ snap }: { snap: Snapshot }) {
             const team = teamById(state, t.teamId);
             const col = colorOf(team);
             return (
-              <div class={`pod p${i}`} key={t.teamId} style={{ borderColor: col.hex }}>
+              <div class={`pod p${i}`} key={t.teamId}>
                 <div class="pn">
                   <Medal place={i + 1} size={22} />
                   <TeamStack riders={ridersOf(state, team.id)} color={team.color} size={26} /> {team.name}
@@ -1017,7 +1029,7 @@ function Finished({ snap }: { snap: Snapshot }) {
               <div class="award" key={a.title}>
                 <div class="ty at">{a.title.toUpperCase()}</div>
                 <div class="aw-team">
-                  {star ? <RiderAvatar rider={star} color={team.color} size={30} /> : <span class="chip" style={{ background: colorOf(team).hex }} />}
+                  {star ? <RiderAvatar rider={star} color={team.color} size={30} /> : <span class="chip" data-s={colorOf(team).shape} style={{ background: colorOf(team).hex }} />}
                   {team.name}
                 </div>
                 <div class="dim">{a.blurb}</div>
