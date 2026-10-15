@@ -88,7 +88,7 @@
   animation: batt-low 1s ease-in-out infinite;
 }
 .batt b {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--ink);
 }
 @keyframes batt-low {
@@ -105,7 +105,7 @@
   padding: 1px 8px 1px 3px;
   border-radius: 999px;
   background: var(--panel-2);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -116,7 +116,7 @@
   height: 18px;
   border-radius: 50%;
   font-style: normal;
-  font-size: 12px;
+  font-size: 13px;
   background: rgba(255, 255, 255, 0.1);
 }
 .tbadge.t-sprinter i {
@@ -138,7 +138,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
 }
 .qtag i {
@@ -295,7 +295,7 @@
   top: -11px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--accent);
   text-shadow: 0 0 3px #000;
 }
@@ -412,7 +412,7 @@
   font-size: clamp(15px, 1.4vw, 22px);
 }
 .step3 .tsub {
-  font-size: 12px;
+  font-size: 13px;
   opacity: 0.85;
 }
 .podium3.compact {
@@ -435,14 +435,14 @@
   font-size: 22px;
 }
 .podium3.compact .tn {
-  font-size: 12px;
+  font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 100%;
 }
 .podium3.compact .tp {
-  font-size: 12px;
+  font-size: 13px;
 }
 .podium3.compact .block {
   padding: 6px 4px 8px;

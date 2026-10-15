@@ -483,7 +483,7 @@ function Game({
     finished: 'Eindstand',
   };
   const stageTag =
-    state.phase === 'lobby' || state.phase === 'briefing' || state.phase === 'finished' ? '' : `E${state.stage}/${STAGES} · `;
+    state.phase === 'lobby' || state.phase === 'briefing' || state.phase === 'finished' ? '' : `E${state.stage} · `;
 
   return (
     <div class="game" style={{ '--team': col.hex } as Record<string, string>}>
