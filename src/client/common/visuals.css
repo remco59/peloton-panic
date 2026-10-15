@@ -4,6 +4,7 @@
   flex: none;
   display: block;
   border-radius: 50%;
+  clip-path: circle(50%);
 }
 .rfigure {
   display: block;
