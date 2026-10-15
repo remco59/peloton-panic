@@ -129,6 +129,9 @@ export function timeout(s: GameState): GameState {
       endRecruit(s);
       break;
     }
+    case 'naming':
+      endNaming(s); // wie geen naam gaf, houdt de willekeurige namen
+      break;
     case 'draft': {
       const teamId = currentDraftTeam(s);
       if (teamId) autoPick(s, teamId);

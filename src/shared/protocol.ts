@@ -41,7 +41,8 @@ export type ClientMsg =
   | { t: 'tv:resume'; code: string; origin: string }
   | { t: 'player:join'; code: string; name: string; token?: string }
   | { t: 'act'; action: PlayerAction }
-  | { t: 'president'; what: PresidentAction };
+  | { t: 'president'; what: PresidentAction }
+  | { t: 'takeover' }; // een speler neemt zijn ploeg terug van de automatische piloot
 
 export interface FeedBatch {
   id: number;
@@ -54,6 +55,7 @@ export interface RoomInfo {
   joinUrl: string;
   presidentTeamId: string | null;
   connected: Record<string, boolean>;
+  autopilot: Record<string, boolean>; // een bot speelt voor dit team omdat de speler weg of afwezig is
   phaseEndsAt: number | null;
   serverNow: number;
 }

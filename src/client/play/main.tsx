@@ -347,6 +347,7 @@ function App() {
 
   const act = (action: PlayerAction) => sock.current?.send({ t: 'act', action });
   const president = (what: PresidentAction) => sock.current?.send({ t: 'president', what });
+  const takeover = () => sock.current?.send({ t: 'takeover' });
   const join = (code: string, name: string) => {
     const next = { code: code.toUpperCase(), token: '', name };
     setSaved(next);
@@ -361,6 +362,7 @@ function App() {
       view={view}
       act={act}
       president={president}
+      takeover={takeover}
       error={error}
       online={online}
       clock={() => Date.now() + offset.current}
@@ -443,11 +445,12 @@ function Game({
   view,
   act,
   president,
+  takeover,
   error,
   online,
   clock,
   leave,
-}: GameProps & { error: string | null; online: boolean; clock: () => number; leave: () => void }) {
+}: GameProps & { takeover: () => void; error: string | null; online: boolean; clock: () => number; leave: () => void }) {
   useNow(500);
   useCues(view, error);
   const [slot, setSlot] = useState<HTMLElement | null>(null);
@@ -498,6 +501,14 @@ function Game({
         <span class="hint-slot" ref={setSlot} />
       </header>
       {!online && <div class="offline">Opnieuw verbinden...</div>}
+      {online && view.autopilot[teamId] && (
+        <div class="pilot" role="status">
+          <span>Een bot speelt voor jullie ploeg.</span>
+          <button type="button" onClick={takeover}>
+            Terug aan het stuur
+          </button>
+        </div>
+      )}
       {error && <div class="err">{error}</div>}
       <HintSlot.Provider value={slot}>
         <main key={state.phase}>
