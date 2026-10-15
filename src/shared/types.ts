@@ -16,6 +16,7 @@ export const OVERTRAIN_FREE = 2; // vermoeidheid tot en met dit niveau geeft gee
 export const CHASE_GAP = 4; // tegels achter de mediaan voor de peloton je terugtrekt
 export const POINTS_BY_RANK = [10, 7, 5, 3, 2, 1];
 export const KOPMAN_FACTOR = 2; // de punten van je kopman tellen dubbel
+export const STAGE_FACTOR = [1, 1, 2]; // puntenvermenigvuldiger per etappe: de slotetappe telt dubbel
 export const HELP_BONUS = 3; // beweging die de kopman krijgt per knecht die helpt
 export const HELP_RANGE = 3; // een knecht helpt alleen als hij zo dichtbij de kopman rijdt
 export const PREMIE_POINTS = [3, 2, 1]; // tussensprint en bergpremie: de eerste drie renners
@@ -30,7 +31,7 @@ export const PELOTON_MIN = 3; // een groep van minstens zoveel renners is een pe
 export const PELOTON_REST = 1; // energie die je in een peloton terugkrijgt (je rijdt lichter)
 export const ALONE_COST = 1; // extra energie voor wie alleen of met z'n tweeën rijdt
 export const DRAFT_BIG = 2; // drafting in een peloton (cluster van minstens PELOTON_MIN) is sterker dan in een duo
-export const ALONE_MOVE = 1; // tegels tegenwind voor wie echt alleen rijdt (niet in een afdaling)
+export const ALONE_MOVE = 2; // tegels tegenwind voor wie echt alleen rijdt (niet in een afdaling)
 export const TEAM_BONUS = 1; // tegels per teamgenoot in dezelfde groep
 export const TEAM_BONUS_MAX = 2; // maximaal zoveel tegels teamwerk
 export const CHASE_NEAR = 3; // een groep van >= PELOTON_MIN jaagt vanaf zoveel tegels achter een ontsnapper

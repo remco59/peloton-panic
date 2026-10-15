@@ -18,7 +18,7 @@ import {
   stageFit,
   teamDefIds,
 } from '../src/shared/engine';
-import { SLOT_LIMITS, STAGES, TRAININGS_PER_RIDER } from '../src/shared/types';
+import { SLOT_LIMITS, STAGE_FACTOR, STAGES, TRAININGS_PER_RIDER } from '../src/shared/types';
 import type { Action, Effort, GameState, SlotKind } from '../src/shared/types';
 
 type Rand = () => number;
@@ -176,8 +176,10 @@ interface Stats {
   teamBonus: number;
   weather: Record<string, number>;
   crashByWeather: Record<string, { rounds: number; crashes: number }>;
-  withDef: Record<string, { n: number; pts: number }>;
-  withoutDef: Record<string, { n: number; pts: number }>;
+  // Per kaart, per etappe: scores als percentage van het gemiddelde team in die etappe. Per etappe vergeleken,
+  // want kaarten stapelen zich op en late etappes tellen zwaarder (anders lijken bezitters beter dan ze zijn).
+  withDef: Record<string, Record<number, { n: number; pct: number }>>;
+  withoutDef: Record<string, Record<number, { n: number; pct: number }>>;
   comeback: { rank: number; won: number; games: number }[]; // rank na etappe 1 (0 = eerste)
 }
 
@@ -304,13 +306,14 @@ function playSeason(seed: number, order: Policy[], st: Stats): void {
       case 'results': {
         const res = s.stageResult!;
         const tracked = Object.keys(CARD_DEFS).filter((d) => !['training', 'sabotage', 'race'].includes(CARD_DEFS[d].kind));
+        const mean = res.teams.reduce((n, t) => n + t.stagePoints, 0) / res.teams.length || 1;
         for (const t of res.teams) {
           const have = new Set(installed[t.teamId] ?? []);
           for (const d of tracked) {
-            const bucket = have.has(d) ? st.withDef : st.withoutDef;
-            bucket[d] ??= { n: 0, pts: 0 };
-            bucket[d].n += 1;
-            bucket[d].pts += t.stagePoints;
+            const bucket = (have.has(d) ? st.withDef : st.withoutDef)[d] ??= {};
+            const b = (bucket[res.stage] ??= { n: 0, pct: 0 });
+            b.n += 1;
+            b.pct += (100 * t.stagePoints) / mean;
           }
         }
         st.weather[s.weather] = (st.weather[s.weather] ?? 0) + 1;
@@ -464,15 +467,41 @@ console.log(
 console.log('  energie over bij de finish: gem', (100 * avg(st.leftover)).toFixed(0) + '% van het maximum');
 console.log('  voorsprong leider op mediaan bij finish: gem', avg(st.stageLeaderGap).toFixed(1), 'tegels');
 
-console.log('\nWie wint het seizoen, gerekend vanaf de stand na etappe 1 (25% = gelijk)');
+/** Hoe vaak wint de leider na etappe 1 als elke etappe puur toeval is? Dat is de ondergrens, niet 25%. */
+function luckOnlyLeaderWinRate(n = 200000): number {
+  const base = [22, 15, 10, 5];
+  let wins = 0;
+  for (let i = 0; i < n; i++) {
+    const tot = [0, 0, 0, 0];
+    let leader = -1;
+    for (let st = 0; st < STAGES; st++) {
+      const p = base.slice();
+      for (let k = p.length - 1; k > 0; k--) {
+        const j = Math.floor(Math.random() * (k + 1));
+        [p[k], p[j]] = [p[j], p[k]];
+      }
+      for (let t = 0; t < 4; t++) tot[t] += p[t] * (STAGE_FACTOR[st] ?? 1);
+      if (st === 0) leader = tot.indexOf(Math.max(...tot));
+    }
+    if (tot.indexOf(Math.max(...tot)) === leader) wins++;
+  }
+  return (100 * wins) / n;
+}
+console.log(`\nWie wint het seizoen, gerekend vanaf de stand na etappe 1 (bij puur toeval wint de leider al ${luckOnlyLeaderWinRate().toFixed(0)}%, niet 25%)`);
 st.comeback.forEach((c) => console.log(`  na etappe 1 nummer ${c.rank + 1}: wint ${pct(c.won, c.games)}`));
 
-console.log('\nWaarde per kaart: extra punten per etappe als je het hebt (t.o.v. zonder)');
+console.log('\nWaarde per kaart: extra score per etappe als je het hebt, in % van het gemiddelde team (per etappe vergeleken)');
 const rows = Object.keys(st.withDef)
   .map((d) => {
-    const w = st.withDef[d];
-    const wo = st.withoutDef[d] ?? { n: 0, pts: 0 };
-    return { d, n: w.n, diff: w.pts / Math.max(1, w.n) - wo.pts / Math.max(1, wo.n) };
+    let n = 0;
+    let sum = 0;
+    for (const [stage, w] of Object.entries(st.withDef[d])) {
+      const wo = st.withoutDef[d]?.[Number(stage)];
+      if (!wo || wo.n === 0) continue;
+      n += w.n;
+      sum += w.n * (w.pct / w.n - wo.pct / wo.n);
+    }
+    return { d, n, diff: n ? sum / n : 0 };
   })
   .sort((a, b) => b.diff - a.diff);
-for (const r of rows) console.log(' ', CARD_DEFS[r.d].name.padEnd(26), (r.diff >= 0 ? '+' : '') + r.diff.toFixed(2), `(n=${r.n})`);
+for (const r of rows) console.log(' ', CARD_DEFS[r.d].name.padEnd(26), (r.diff >= 0 ? '+' : '') + r.diff.toFixed(1) + '%', `(n=${r.n})`);

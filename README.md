@@ -233,7 +233,7 @@ Alles wat je in één oogopslag moet snappen is getekend (SVG en CSS, geen losse
 | `npm test` | Tests van de regelmotor en de kamers (GitHub Actions draait test, typecheck en build bij elke PR) |
 | `npm run typecheck` | TypeScript-controle |
 | `npm run build` / `npm start` | Productiebuild en server |
-| `npm run balance` | Simuleert honderden seizoenen met bot-strategieën en toont winkansen, racelengte en de waarde per kaart |
+| `npm run balance [seizoenen] [mirror]` | Simuleert seizoenen met bot-strategieën en toont winkansen, racelengte en de waarde per kaart (per etappe vergeleken, in % van het gemiddelde team). Met `mirror` spelen vier identieke bots, zodat strategieverschil de cijfers niet vertroebelt |
 | `npm run screenshots` | Speelt een seizoen met bots en slaat screenshots op in `docs/screenshots` (Playwright met Chromium; zet `CHROME=/pad/naar/chrome` als je eigen Chrome wilt gebruiken) |
 
 ## Screenshots

@@ -1,6 +1,6 @@
 // Uitslag en beloning.
 
-import { KOPMAN_FACTOR, POINT_BONUS_STEP, POINTS_BY_RANK, STAGES, START_COINS } from '../types';
+import { KOPMAN_FACTOR, POINT_BONUS_STEP, POINTS_BY_RANK, STAGE_FACTOR, STAGES, START_COINS } from '../types';
 import type { Award, GameState, Team } from '../types';
 import { RuleError, STAT_KEYS } from './base';
 import { perksOfTeam, teamOf } from './calc';
@@ -14,7 +14,7 @@ export function finishStage(s: GameState): void {
   const rankOf = new Map<string, number>();
   ordered.forEach((x, i) => rankOf.set(x.r.id, i + 1));
   // De slotetappe telt dubbel, zodat het seizoen tot het einde spannend blijft.
-  const factor = s.stage >= STAGES ? 2 : 1;
+  const factor = STAGE_FACTOR[s.stage - 1] ?? 1;
   const isKopman = (riderId: string) => Object.values(s.kopman).includes(riderId);
   const ranking = ordered.map((x, i) => {
     const kopman = isKopman(x.r.id);

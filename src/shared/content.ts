@@ -208,9 +208,9 @@ const defs: CardDef[] = [
   { id: 'fysio', kind: 'staff', name: 'Fysiotherapeut', text: 'Na elke etappe 1 extra vermoeidheid weg. Overtraining begint 1 later.', price: 2, count: 2, perk: { fatigueRecover: 1, overtrainTolerance: 1 } },
 
   // Materiaal.
-  { id: 'reservefiets', kind: 'material', name: 'Reservefiets', text: 'Vangt 2 lekke banden of vallen per etappe volledig op.', price: 3, count: 2, perk: { shield: 2 } },
-  { id: 'aerowielen', kind: 'material', name: 'Aero-wielen', text: '+1 beweging op vlakke stukken, als je Normaal of Alles rijdt.', price: 4, count: 1, perk: { flat: 1 } },
-  { id: 'klimfiets', kind: 'material', name: 'Lichte klimfiets', text: '+1 beweging op klimmen, als je Normaal of Alles rijdt.', price: 4, count: 1, perk: { climb: 1 } },
+  { id: 'reservefiets', kind: 'material', name: 'Reservefiets', text: 'Vangt 1 lekke band of val per etappe volledig op.', price: 2, count: 2, perk: { shield: 1 } },
+  { id: 'aerowielen', kind: 'material', name: 'Aero-wielen', text: '+1 beweging op vlakke stukken, als je Normaal of Alles rijdt.', price: 5, count: 1, perk: { flat: 1 } },
+  { id: 'klimfiets', kind: 'material', name: 'Lichte klimfiets', text: '+1 beweging op klimmen, als je Normaal of Alles rijdt.', price: 5, count: 1, perk: { climb: 1 } },
   { id: 'regenbanden', kind: 'material', name: 'Regenbanden', text: 'Bij nat wegdek valt je renner veel minder snel en regen kost hem niets op kasseien en afdalingen.', price: 3, count: 2, perk: { wetGrip: 1 } },
 
   // Teamwagens.

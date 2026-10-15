@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  baseParts,
   botDraft,
   botEfforts,
   botShopStep,
@@ -38,7 +39,9 @@ import {
   PREMIE_POINTS,
   RIDERS_PER_TEAM,
   START_COINS,
+  POINTS_BY_RANK,
   STAGES,
+  STAGE_FACTOR,
   TRACK_LENGTH,
 } from './types';
 import { CARD_DEFS, EVENTS, EVENT_IDS } from './content';
@@ -400,13 +403,27 @@ describe('race', () => {
     expect(s.report!.moves.every((m) => m.effort === 'normaal' || m.exhausted)).toBe(true);
   });
 
-  it('een reservefiets vangt pech op', () => {
+  it('een reservefiets vangt precies één pech of val per etappe op', () => {
     let s = finishDraft(started(2));
     let c: Card;
     ({ s, card: c } = give(s, s.teams[0].id, 'reservefiets') as { s: GameState; card: Card });
     s = reduce(s, { type: 'install', teamId: s.teams[0].id, cardId: c.id });
     for (const t of s.teams) s = reduce(s, { type: 'ready', teamId: t.id });
-    expect(s.teams[0].raceShield).toBe(2);
+    expect(s.teams[0].raceShield).toBe(1);
+  });
+
+  it('aero-wielen en klimfiets geven +1 op hun terrein, behalve als je Rustig rijdt', () => {
+    const s = toRace(2);
+    const r = s.riders[0];
+    const terrainPart = (defs: string[], terrain: 'flat' | 'climb', effort: Effort) =>
+      baseParts({ ...s, terrain: s.terrain.map(() => terrain), event: null }, { ...r, quirk: 'socks', pos: 10 }, perksOf(defs), effort, false).terrain;
+    for (const effort of ['normaal', 'alles'] as const) {
+      expect(terrainPart(['aerowielen'], 'flat', effort) - terrainPart([], 'flat', effort)).toBe(1);
+      expect(terrainPart(['klimfiets'], 'climb', effort) - terrainPart([], 'climb', effort)).toBe(1);
+    }
+    expect(terrainPart(['aerowielen'], 'flat', 'rustig')).toBe(terrainPart([], 'flat', 'rustig'));
+    // Een klimfiets helpt niet op vlak terrein.
+    expect(terrainPart(['klimfiets'], 'flat', 'alles')).toBe(terrainPart([], 'flat', 'alles'));
   });
 });
 
@@ -580,6 +597,21 @@ describe('uitslag en seizoen', () => {
     expect(again.phase).toBe('lobby');
     expect(again.teams).toHaveLength(4);
     expect(again.teams.every((t) => t.points === 0 && t.hand.length === 0)).toBe(true);
+  });
+
+  it('de slotetappe telt dubbel (etappe 1 en 2 enkel)', () => {
+    expect(STAGE_FACTOR).toEqual([1, 1, 2]);
+    const rand = makeRand(8);
+    let s = started(4, 77);
+    for (let stage = 1; stage <= STAGES; stage++) {
+      s = playStage(s, rand);
+      const res = s.stageResult!;
+      for (const x of res.ranking) {
+        const base = POINTS_BY_RANK[x.rank - 1] ?? 0;
+        expect(x.points).toBe(base * STAGE_FACTOR[stage - 1] * (x.kopman ? 2 : 1));
+      }
+      s = reduce(s, { type: 'nextStage' });
+    }
   });
 
   it('in de volgende etappe kiest het laagste team als eerste', () => {
