@@ -1,5 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { QUIRKS, RIDER_TYPES, STAT_LABELS, TEAM_COLORS } from '../../shared/content';
+import { useBump } from './motion';
 import type { EventId, QuirkId, Rider, RiderType, Stat, Terrain } from '../../shared/types';
 
 // Alles wat in plaats van tekst getekend wordt: renner-avatars, podium, statistieken, energie,
@@ -372,14 +373,15 @@ export function Crown({ size = 16 }: { size?: number }) {
 /** Munten als stapeltje muntjes. */
 export function Coins({ n, max = 8 }: { n: number; max?: number }) {
   const shown = Math.min(max, Math.max(0, n));
+  const bump = useBump(n);
   return (
     <span class="coins-vis" title={`${n} munten`}>
-      <span class={`stackc ${shown === 0 ? 'zero' : ''}`} style={{ width: `${14 + 3 * Math.max(0, shown - 1) + 4}px` }}>
+      <span class={`stackc ${shown === 0 ? 'zero' : ''} ${bump.includes('bump-up') ? 'drop' : ''}`} style={{ width: `${14 + 3 * Math.max(0, shown - 1) + 4}px` }}>
         {Array.from({ length: Math.max(1, shown) }, (_, i) => (
           <i key={i} style={{ '--i': String(i) } as Record<string, string>} />
         ))}
       </span>
-      <b class="ty">{n}</b>
+      <b class={`ty ${bump}`}>{n}</b>
     </span>
   );
 }

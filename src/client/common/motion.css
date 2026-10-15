@@ -1,0 +1,92 @@
+/* Motion language. One curve for arrivals (fast start, long settle), short durations, transform and
+   opacity only. Everything is visible in its default state; animations only decorate the arrival.
+   Reduced motion keeps every fade and colour flash but drops travel, scale and all loops. */
+
+:root {
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  /* How far things travel when they arrive. Zero under reduced motion. */
+  --rise: 10px;
+  --pop: 1.4;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--rise));
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ---- A number changed: it swells in the colour of what happened, then settles ---- */
+.bump-up.bump-a {
+  animation: bump-up 560ms var(--ease-out);
+}
+.bump-up.bump-b {
+  animation: bump-up-b 560ms var(--ease-out);
+}
+.bump-down.bump-a {
+  animation: bump-down 560ms var(--ease-out);
+}
+.bump-down.bump-b {
+  animation: bump-down-b 560ms var(--ease-out);
+}
+.bump-up,
+.bump-down {
+  transform-origin: 50% 60%;
+}
+@keyframes bump-up {
+  from {
+    transform: scale(var(--pop));
+    color: var(--accent);
+  }
+}
+@keyframes bump-up-b {
+  from {
+    transform: scale(var(--pop));
+    color: var(--accent);
+  }
+}
+@keyframes bump-down {
+  from {
+    transform: scale(0.82);
+    color: var(--bad);
+  }
+}
+@keyframes bump-down-b {
+  from {
+    transform: scale(0.82);
+    color: var(--bad);
+  }
+}
+
+/* ---- The last three seconds of a timer: one visible beat per second, matching the audible tick ---- */
+.tick {
+  display: inline-block;
+  color: var(--bad);
+  animation: tick 1s var(--ease-out);
+}
+@keyframes tick {
+  from {
+    transform: scale(1.3);
+  }
+  45% {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --rise: 0px;
+    --pop: 1;
+  }
+  /* The low-battery pulse becomes its static end state; the beat of a timer keeps only its colour. */
+  .batt.low .cell,
+  .tick {
+    animation: none;
+  }
+}

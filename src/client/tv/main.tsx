@@ -26,6 +26,7 @@ import type { FeedBatch, RoomInfo, ServerMsg } from '../../shared/protocol';
 import type { PublicState, PublicTeam, Rider, Stat } from '../../shared/types';
 import { PREMIE_POINTS, STAGES } from '../../shared/types';
 import { sound } from '../common/sound';
+import { useBump, useChanged, useFlip } from '../common/motion';
 import { openSocket } from '../common/ws';
 import type { Socket } from '../common/ws';
 import { Broadcaster } from './broadcast';
@@ -210,9 +211,9 @@ function Header({ snap, clock, online }: { snap: Snapshot; clock: () => number; 
   const { state } = snap;
   const left = snap.phaseEndsAt ? Math.max(0, Math.ceil((snap.phaseEndsAt - clock()) / 1000)) : null;
   const [muted, setMuted] = useState(sound.muted);
+  const timed = state.phase === 'sponsors' || state.phase === 'recruit' || state.phase === 'draft' || state.phase === 'team' || state.phase === 'race';
   useEffect(() => {
-    // The last seconds of a timer tick down out loud.
-    const timed = state.phase === 'sponsors' || state.phase === 'recruit' || state.phase === 'draft' || state.phase === 'team' || state.phase === 'race';
+    // The last seconds of a timer tick down out loud, and visibly (see the .tick class).
     if (timed && left !== null && left > 0 && left <= 3) sound.ui('count');
   }, [left, state.phase]);
   const label: Record<string, string> = {
@@ -238,7 +239,13 @@ function Header({ snap, clock, online }: { snap: Snapshot; clock: () => number; 
         {state.tutorial && <span class="tut ty">TUTORIAL</span>}
       </div>
       <div class="timer ty">
-        {left !== null && state.phase !== 'resolve' ? `${left}s` : ''}
+        {left !== null && state.phase !== 'resolve' ? (
+          <span key={timed && left > 0 && left <= 3 ? left : 'steady'} class={timed && left > 0 && left <= 3 ? 'tick' : ''}>
+            {left}s
+          </span>
+        ) : (
+          ''
+        )}
         {!online && <span class="bad"> OFFLINE</span>}
         <button
           class="mute ty"
@@ -372,8 +379,12 @@ function Ladder({ snap }: { snap: Snapshot }) {
   const kopmen = new Set(Object.values(state.kopman));
   const lead = rows[0]?.tile ?? 0;
   const span = Math.max(1, rows[rows.length - 1] ? lead - rows[rows.length - 1].tile : 1);
+  const ref = useRef<HTMLDivElement>(null);
+  useFlip(ref);
+  // The rider who just took the yellow jersey gets a sweep across the row.
+  const took = useChanged(rows[0]?.rider.id ?? null);
   return (
-    <div class={`standings ladder frame ${rows.length > 9 ? 'dense' : ''}`} style={{ '--n': rows.length }}>
+    <div ref={ref} class={`standings ladder frame ${rows.length > 9 ? 'dense' : ''}`} style={{ '--n': rows.length }}>
       <div class="tag ty">
         Koers · {rows.length} renners · tegel {lead} van {state.trackLength}
       </div>
@@ -384,13 +395,13 @@ function Ladder({ snap }: { snap: Snapshot }) {
         const r = row.rider;
         const left = span > 0 ? (1 - row.gapLeader / span) * 100 : 100;
         return (
-          <div key={r.id}>
+          <div key={r.id} data-flip={r.id}>
             {i > 0 && row.gapAhead > 0 && (
               <div class="gap" style={{ '--g': Math.min(row.gapAhead, 6) }}>
                 <span>{rows.length > 9 && row.gapAhead < 2 ? '' : tiles(row.gapAhead)}</span>
               </div>
             )}
-            <div class={`lrow ${row.rank === 1 ? 'first' : ''} ${tied ? 'tied' : ''}`} style={{ '--c': col.hex }}>
+            <div class={`lrow ${row.rank === 1 ? 'first' : ''} ${tied ? 'tied' : ''} ${took === r.id && row.rank === 1 ? 'took' : ''}`} style={{ '--c': col.hex }}>
               <span class="rk ty">{tied ? '' : row.rank === 1 ? <Crown size={18} /> : row.rank}</span>
               <span class="av">
                 <RiderAvatar rider={r} color={team.color} size="100%" />
@@ -420,10 +431,21 @@ function Standings({ snap }: { snap: Snapshot }) {
   const { state } = snap;
   const racing = state.phase === 'race' || state.phase === 'resolve' || state.phase === 'results';
   if (racing) return <Ladder snap={snap} />;
+  return <TeamStandings snap={snap} />;
+}
+
+function Points({ n }: { n: number }) {
+  return <span class={`best ty ${useBump(n)}`}>{n}</span>;
+}
+
+function TeamStandings({ snap }: { snap: Snapshot }) {
+  const { state } = snap;
+  const ref = useRef<HTMLDivElement>(null);
+  useFlip(ref);
   const rows = [...state.teams].sort((a, b) => b.points - a.points);
   const maxPts = Math.max(1, ...rows.map((t) => t.points));
   return (
-    <div class="standings frame">
+    <div ref={ref} class="standings frame">
       <div class="tag ty">Klassement</div>
       {rows.map((t, i) => {
         const col = colorOf(t);
@@ -433,7 +455,7 @@ function Standings({ snap }: { snap: Snapshot }) {
         const turn = waiting === 'AAN DE BEURT';
         const rs = ridersOf(state, t.id);
         return (
-          <div class={`row ${turn ? 'turn' : ''}`} key={t.id} style={{ '--c': col.hex }}>
+          <div class={`row ${turn ? 'turn' : ''}`} key={t.id} data-flip={t.id} style={{ '--c': col.hex }}>
             <span class="rank">
               <Medal place={i + 1} size={26} />
             </span>
@@ -457,7 +479,7 @@ function Standings({ snap }: { snap: Snapshot }) {
                 <i style={{ width: `${(t.points / maxPts) * 100}%` }} />
               </span>
             </div>
-            <span class="best ty">{t.points}</span>
+            <Points n={t.points} />
           </div>
         );
       })}

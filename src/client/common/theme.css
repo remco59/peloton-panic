@@ -8,6 +8,7 @@
 @import '@fontsource/barlow-condensed/latin-800.css';
 @import './visuals.css';
 @import './card.css';
+@import './motion.css';
 
 :root {
   /* Flat palette: solid fills, hairline borders, no shadows. */

@@ -99,7 +99,7 @@ button:disabled {
   background: var(--panel-2);
   border: 0;
   border-radius: var(--r-md);
-  transition: transform 0.08s, background 0.15s;
+  transition: transform 80ms var(--ease-out), background 160ms, color 160ms;
 }
 .big.primary,
 .small-btn.primary {
@@ -479,6 +479,7 @@ p {
   box-shadow: inset 0 0 0 2px var(--c, var(--line));
   font-size: 14px;
   font-weight: 700;
+  transition: background 160ms, color 160ms;
 }
 .pill.on {
   background: var(--c, var(--accent));
@@ -578,6 +579,7 @@ p {
   font-size: 13px;
   letter-spacing: 0.06em;
   color: var(--muted);
+  transition: background 200ms var(--ease-out), color 200ms var(--ease-out);
 }
 .tab.on {
   background: var(--panel-2);
@@ -590,6 +592,7 @@ p {
   background: var(--panel-2);
   color: var(--ink);
   font-size: 13px;
+  animation: badge-pop 420ms var(--ease-out) backwards;
 }
 .tab.on .badge {
   background: var(--bg);
@@ -1048,7 +1051,7 @@ select.pick {
   display: flex;
   align-items: flex-end;
   background: rgba(5, 6, 14, 0.62);
-  animation: sheet-fade 0.15s ease-out;
+  animation: sheet-fade 200ms var(--ease-out);
 }
 .sheet {
   width: 100%;
@@ -1060,7 +1063,16 @@ select.pick {
   background: var(--panel);
   border-radius: var(--r-lg) var(--r-lg) 0 0;
   padding-bottom: max(14px, env(safe-area-inset-bottom));
-  animation: sheet-rise 0.2s ease-out;
+  animation: sheet-rise 320ms var(--ease-out);
+}
+/* Leaving is faster than arriving. */
+.sheet-wrap.closing {
+  opacity: 0;
+  transition: opacity 160ms var(--ease-in);
+}
+.sheet-wrap.closing .sheet {
+  transform: translateY(var(--sheet-from, 100%));
+  transition: transform 160ms var(--ease-in);
 }
 .sheet-grip {
   flex: none;
@@ -1108,7 +1120,7 @@ select.pick {
 }
 @keyframes sheet-rise {
   from {
-    transform: translateY(100%);
+    transform: translateY(var(--sheet-from, 100%));
   }
 }
 @keyframes sheet-fade {
@@ -1747,4 +1759,43 @@ select.pick {
 }
 .ct-tag.bonus {
   color: var(--accent);
+}
+
+/* ---- Motion ---- */
+
+/* A new phase: the screen settles in. Content is already visible if the script is slow; this only decorates. */
+main > * {
+  animation: rise-in 280ms var(--ease-out) backwards;
+}
+/* Switching tabs inside the preparation phase: a quick fade, no travel, so the tab bar stays the anchor. */
+.tabbody > * {
+  animation: fade-in 200ms var(--ease-out) backwards;
+}
+.err,
+.offline {
+  animation: rise-in 220ms var(--ease-out) backwards;
+}
+/* Round results arrive one rider after the other. */
+.frame.result,
+.premie-win {
+  animation: rise-in 360ms var(--ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * 90ms);
+}
+.premie-win {
+  animation-delay: 0ms;
+}
+@keyframes badge-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --sheet-from: 0px;
+  }
+  .badge {
+    animation-name: fade-in;
+  }
 }

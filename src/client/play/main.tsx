@@ -19,6 +19,7 @@ import {
 import type { PodiumEntry } from '../common/visuals';
 import './play.css';
 import { installClickSounds, useCues } from './cues';
+import { reducedMotion, useCountUp } from '../common/motion';
 import { CardReveal, useReveal } from './reveal';
 import {
   BRIEFING,
@@ -174,18 +175,26 @@ function markSeen(id: string) {
 
 /** Bottom sheet: de plek voor alles wat het hoofdscherm niet altijd nodig heeft. */
 function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: preact.ComponentChildren }) {
+  // Leaving is quicker than arriving: the sheet drops away for 160ms before the parent unmounts it.
+  const [closing, setClosing] = useState(false);
+  const close = () => {
+    if (closing) return;
+    if (reducedMotion()) return onClose();
+    setClosing(true);
+    setTimeout(onClose, 160);
+  };
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, closing]);
   return (
-    <div class="sheet-wrap" onClick={onClose}>
+    <div class={`sheet-wrap ${closing ? 'closing' : ''}`} onClick={close}>
       <div class="sheet" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div class="sheet-grip" />
         <div class="sheet-head">
           <b class="sheet-title">{title}</b>
-          <button class="x" onClick={onClose} aria-label="Sluiten">
+          <button class="x" onClick={close} aria-label="Sluiten">
             ✕
           </button>
         </div>
@@ -489,6 +498,7 @@ function Game({
     results: 'Uitslag',
     finished: 'Eindstand',
   };
+  const timedPhase = state.phase !== 'lobby' && state.phase !== 'briefing' && state.phase !== 'results' && state.phase !== 'finished';
   const stageTag =
     state.phase === 'lobby' || state.phase === 'briefing' || state.phase === 'finished' ? '' : `E${state.stage} · `;
 
@@ -504,7 +514,9 @@ function Game({
           {stageTag}
           {title[state.phase]}
         </span>
-        <span class="tm ty">{left !== null && state.phase !== 'resolve' ? `${left}s` : ''}</span>
+        <span class="tm ty" key={timedPhase && left !== null && left > 0 && left <= 3 ? left : 'steady'}>
+          {left !== null && state.phase !== 'resolve' ? (timedPhase && left > 0 && left <= 3 ? <span class="tick">{left}s</span> : `${left}s`) : ''}
+        </span>
         <span class="hint-slot" ref={setSlot} />
       </header>
       {!online && <div class="offline">Opnieuw verbinden...</div>}
@@ -1208,8 +1220,8 @@ function TeamPhase({ view, act }: ViewProps) {
         {TABS.map((t) => (
           <button key={t} role="tab" aria-selected={tab === t} class={`tab ty ${tab === t ? 'on' : ''}`} onClick={() => setTab(t)}>
             {t.toUpperCase()}
-            {t === 'kaarten' && me!.hand.length > 0 && <span class="badge">{me!.hand.length}</span>}
-            {t === 'ruilen' && incoming > 0 && <span class="badge hot">{incoming}</span>}
+            {t === 'kaarten' && me!.hand.length > 0 && <span class="badge" key={me!.hand.length}>{me!.hand.length}</span>}
+            {t === 'ruilen' && incoming > 0 && <span class="badge hot" key={incoming}>{incoming}</span>}
           </button>
         ))}
       </div>
@@ -2037,6 +2049,12 @@ function Race({ view, act }: ViewProps) {
   );
 }
 
+/** Tiles gained this round: counts up when the result card arrives. */
+function Gained({ n }: { n: number }) {
+  const shown = useCountUp(Math.max(0, n));
+  return <span class="ty acc">+{n < 0 ? n : shown}</span>;
+}
+
 function Resolve({ view }: { view: View }) {
   const { state, teamId } = view;
   const rep = state.report;
@@ -2062,7 +2080,7 @@ function Resolve({ view }: { view: View }) {
       )}
       <div class="stack grow">
         {rep &&
-          mine.map((r) => {
+          mine.map((r, ri) => {
             const m = rep.moves.find((x) => x.riderId === r.id);
             if (!m) return null;
             const row = rows.find((x) => x.rider.id === r.id);
@@ -2097,10 +2115,10 @@ function Resolve({ view }: { view: View }) {
               m.car ? `volgauto: +${carBonus} energie${m.shielded ? ', pech opgevangen' : ''}` : '',
             ].filter(Boolean);
             return (
-              <div class="frame result" key={r.id}>
+              <div class="frame result" key={r.id} style={{ '--i': ri } as Record<string, string | number>}>
                 <div class="r-top">
                   <b>{r.name}</b>
-                  <span class="ty acc">+{m.to - m.from}</span>
+                  <Gained n={m.to - m.from} />
                 </div>
                 <div class="dim s">{bits.join(' · ')}</div>
                 <div class="dim s">Energie nu: {m.energyAfter}</div>

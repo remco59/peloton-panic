@@ -212,7 +212,7 @@
   display: block;
   height: 100%;
   background: var(--c);
-  transition: width 0.6s;
+  transition: width 700ms var(--ease-out);
 }
 .bot {
   color: var(--muted);
@@ -646,6 +646,7 @@
 }
 
 .panel {
+  animation: rise-in 360ms var(--ease-out) backwards;
   position: absolute;
   inset: 0;
   z-index: 3;
@@ -1163,4 +1164,104 @@
 }
 .ladder.dense .gap span {
   display: none;
+}
+
+/* ---- Motion ---- */
+
+/* A screen takes over: the dark overlay fades up over what was there, its card settles in just after. */
+.overlay {
+  animation: fade-in 320ms var(--ease-out) backwards;
+}
+.overlay > .frame {
+  animation: rise-in 480ms var(--ease-out) 80ms backwards;
+}
+.lobby .team {
+  animation: rise-in 420ms var(--ease-out) backwards;
+}
+.toast {
+  animation: toast-in 240ms var(--ease-out) backwards;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(var(--rise) * -1));
+  }
+}
+
+/* The ladder follows the race: bars and dots glide to where the riders now are. */
+.ladder .lrow {
+  position: relative;
+  isolation: isolate;
+}
+.ladder .bar {
+  contain: layout;
+}
+.ladder .fillp {
+  transition: width 900ms var(--ease-out);
+}
+.ladder .dotp {
+  transition: left 900ms var(--ease-out);
+}
+.standings .best {
+  transform-origin: 100% 60%;
+}
+
+/* New race leader: a yellow sweep across the row and the crown dropping in. */
+.ladder .lrow.took::before {
+  content: '';
+  position: absolute;
+  inset: -2px -8px;
+  z-index: -1;
+  border-radius: var(--r-sm);
+  background: rgba(255, 200, 61, 0.22);
+  pointer-events: none;
+  animation: lead-sweep 1500ms var(--ease-out) both;
+}
+.ladder .lrow.took .rk .crown {
+  transform-origin: 50% 100%;
+  animation: crown-drop 700ms var(--ease-out) both;
+}
+@keyframes lead-sweep {
+  from {
+    clip-path: inset(0 100% 0 0);
+    opacity: 1;
+  }
+  45% {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+    opacity: 0;
+  }
+}
+@keyframes crown-drop {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--rise) * -1.2)) scale(0.3) rotate(-18deg);
+  }
+}
+@keyframes lead-fade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .standings .row.turn {
+    animation: none;
+  }
+  .ladder .lrow.took::before {
+    animation-name: lead-fade;
+  }
+  .ladder .lrow.took .rk .crown {
+    animation: none;
+  }
+  .ladder .fillp,
+  .ladder .dotp {
+    transition: none;
+  }
 }
